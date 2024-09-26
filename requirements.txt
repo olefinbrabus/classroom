@@ -1,0 +1,6 @@
+fastapi
+fastapi-users
+fastapi-users-db-sqlalchemy
+python-dotenv
+aiosqlite
+sqlalchemy
