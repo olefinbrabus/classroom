@@ -1,18 +1,13 @@
 from fastapi.params import Depends
-from fastapi_users import FastAPIUsers
 from fastapi import FastAPI
 
+from settings import fastapi_users, current_user
 from user.auth import auth_backend
-from user.manager import get_user_manager
 from database.models import User
 from user.schemas import UserRead, UserCreate
+from classroom.router import router as classroom_router
 
 app = FastAPI()
-
-fastapi_users = FastAPIUsers[User, int](
-    get_user_manager,
-    [auth_backend],
-)
 
 
 @app.get("/")
@@ -32,7 +27,9 @@ app.include_router(
     tags=["register"],
 )
 
-current_user = fastapi_users.current_user()
+app.include_router(
+    classroom_router, prefix="/classroom", tags=["classroom"]
+)
 
 
 @app.get("/protected-route")
