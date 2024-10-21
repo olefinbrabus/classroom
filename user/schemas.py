@@ -7,9 +7,13 @@ from pydantic import EmailStr
 class UserRead(schemas.BaseUser[int]):
     id: int
     email: EmailStr
-    is_active: bool = True
-    is_superuser: bool = False
-    is_verified: bool = False
+    first_name: str
+    second_name: str
+    third_name: str
+    is_active: bool
+    is_superuser: bool
+    is_verified: bool
+    is_teacher:bool
 
     class Config:
         from_attributes = True
