@@ -2,28 +2,39 @@ import asyncio
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from classroom.crud import (
-    add_classroom_to_class,
-    add_user_to_class,
-    create_class,
-    delete_class,
-    get_class,
-    remove_classroom_from_class,
-    remove_user_from_class,
-    update_class,
+    create_assignment,
+    create_course,
+    create_lesson,
+    create_material,
+    create_submission,
+    enroll_user,
+    get_all_courses,
+    get_assignment_submissions,
+    get_course_lessons,
+    get_lesson_assignments,
+    grade_submission,
+    update_submission,
 )
-from classroom.schemas import ClassSchemaCreate, ClassSchemaUpdate
+from classroom.schemas import (
+    AssignmentSchemaCreate,
+    CourseSchemaCreate,
+    EnrollmentSchemaCreate,
+    GradeSchemaCreate,
+    LessonSchemaCreate,
+    MaterialSchemaCreate,
+    SubmissionSchemaCreate,
+    SubmissionSchemaUpdate,
+)
 from database.engine import BaseModel
-from database.models import (
-    Class,
-    Classroom,
-    User,
-    class_to_classroom_table,
-    class_to_user_table,
+from database.models import User
+from enums import (
+    ClassMaterialsType,
+    EnrollmentRole,
+    SubmissionStatus,
 )
 
 
@@ -45,7 +56,7 @@ async def make_session(tmp_path):
     return engine, async_session_maker
 
 
-async def create_user(db, user_id: int, email: str):
+async def create_user(db, user_id: int, email: str, is_teacher: bool = False):
     user = User(
         id=user_id,
         email=email,
@@ -56,159 +67,206 @@ async def create_user(db, user_id: int, email: str):
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        is_teacher=False,
+        is_teacher=is_teacher,
     )
     db.add(user)
     return user
 
 
-async def create_classroom(db, classroom_id: int, name: str):
-    classroom = Classroom(
-        id=classroom_id,
-        name=name,
-        description=f"{name} description",
+async def create_course_with_people(db):
+    teacher = await create_user(db, 1, "teacher@example.com", is_teacher=True)
+    student = await create_user(db, 2, "student@example.com")
+    outsider = await create_user(db, 3, "outsider@example.com")
+    await db.commit()
+
+    course = await create_course(
+        db=db,
+        course_data=CourseSchemaCreate(
+            title="Python LMS",
+            description="Async backend course",
+        ),
+        user=teacher,
     )
-    db.add(classroom)
-    return classroom
+    await enroll_user(
+        db=db,
+        course_id=course["id"],
+        enrollment_data=EnrollmentSchemaCreate(
+            user_id=student.id,
+            role=EnrollmentRole.STUDENT,
+        ),
+        user=teacher,
+    )
+    return teacher, student, outsider, course
 
 
-async def count_table_rows(db, table):
-    result = await db.execute(select(func.count()).select_from(table))
-    return result.scalar_one()
-
-
-def test_class_crud_handles_complex_user_and_classroom_links(tmp_path):
+def test_lms_flow_enforces_roles_and_published_content(tmp_path):
     async def scenario():
         engine, async_session_maker = await make_session(tmp_path)
 
         try:
             async with async_session_maker() as db:
-                await create_user(db, 1, "student1@example.com")
-                await create_user(db, 2, "student2@example.com")
-                await create_classroom(db, 1, "Backend")
-                await create_classroom(db, 2, "Frontend")
-                await db.commit()
+                teacher, student, outsider, course = await create_course_with_people(db)
 
-                created_class = await create_class(
+                hidden_lesson = await create_lesson(
                     db=db,
-                    class_data=ClassSchemaCreate(
-                        name="Python",
-                        users=[1],
-                        classrooms=[1],
+                    course_id=course["id"],
+                    lesson_data=LessonSchemaCreate(
+                        title="Draft lesson",
+                        position=0,
+                        is_published=False,
                     ),
+                    user=teacher,
                 )
-
-                assert created_class["name"] == "Python"
-                assert [user["id"] for user in created_class["users"]] == [1]
-                assert [room["id"] for room in created_class["classrooms"]] == [1]
-
-                class_id = created_class["id"]
-
-                with_second_user = await add_user_to_class(
+                published_lesson = await create_lesson(
                     db=db,
-                    class_id=class_id,
-                    user_id=2,
+                    course_id=course["id"],
+                    lesson_data=LessonSchemaCreate(
+                        title="Published lesson",
+                        position=1,
+                        is_published=True,
+                    ),
+                    user=teacher,
                 )
-                assert sorted(user["id"] for user in with_second_user["users"]) == [
-                    1,
-                    2,
+
+                student_lessons = await get_course_lessons(
+                    db=db,
+                    course_id=course["id"],
+                    user=student,
+                )
+                assert [lesson["id"] for lesson in student_lessons] == [
+                    published_lesson["id"]
                 ]
-
-                duplicate_user_link = await add_user_to_class(
-                    db=db,
-                    class_id=class_id,
-                    user_id=2,
-                )
-                assert sorted(user["id"] for user in duplicate_user_link["users"]) == [
-                    1,
-                    2,
-                ]
-
-                with_second_room = await add_classroom_to_class(
-                    db=db,
-                    class_id=class_id,
-                    classroom_id=2,
-                )
-                assert sorted(
-                    room["id"] for room in with_second_room["classrooms"]
-                ) == [1, 2]
-
-                duplicate_room_link = await add_classroom_to_class(
-                    db=db,
-                    class_id=class_id,
-                    classroom_id=2,
-                )
-                assert sorted(
-                    room["id"] for room in duplicate_room_link["classrooms"]
-                ) == [1, 2]
-
-                without_first_user = await remove_user_from_class(
-                    db=db,
-                    class_id=class_id,
-                    user_id=1,
-                )
-                assert [user["id"] for user in without_first_user["users"]] == [2]
-
-                without_first_room = await remove_classroom_from_class(
-                    db=db,
-                    class_id=class_id,
-                    classroom_id=1,
-                )
-                assert [room["id"] for room in without_first_room["classrooms"]] == [
-                    2,
-                ]
-
-                updated_class = await update_class(
-                    db=db,
-                    class_id=class_id,
-                    class_data=ClassSchemaUpdate(name="Advanced Python"),
-                )
-                assert updated_class["name"] == "Advanced Python"
-                assert [user["id"] for user in updated_class["users"]] == [2]
-                assert [room["id"] for room in updated_class["classrooms"]] == [2]
-
-                fetched_class = await get_class(db=db, class_id=class_id)
-                assert fetched_class == updated_class
-
-                assert await count_table_rows(db, class_to_user_table) == 1
-                assert await count_table_rows(db, class_to_classroom_table) == 1
-
-                deleted_class = await delete_class(db=db, class_id=class_id)
-                assert deleted_class == {"id": class_id, "deleted": True}
-                assert await count_table_rows(db, class_to_user_table) == 0
-                assert await count_table_rows(db, class_to_classroom_table) == 0
 
                 with pytest.raises(HTTPException) as exc_info:
-                    await get_class(db=db, class_id=class_id)
+                    await get_course_lessons(
+                        db=db,
+                        course_id=course["id"],
+                        user=outsider,
+                    )
+                assert exc_info.value.status_code == 403
 
-                assert exc_info.value.status_code == 404
+                material = await create_material(
+                    db=db,
+                    author_id=teacher.id,
+                    material_data=MaterialSchemaCreate(
+                        title="Model guide",
+                        description="Read before homework",
+                        material_type=ClassMaterialsType.MATERIALS,
+                        lesson_id=published_lesson["id"],
+                    ),
+                    user=teacher,
+                )
+                assert material["lesson_id"] == published_lesson["id"]
+
+                hidden_assignment = await create_assignment(
+                    db=db,
+                    lesson_id=published_lesson["id"],
+                    assignment_data=AssignmentSchemaCreate(
+                        title="Hidden assignment",
+                        is_published=False,
+                    ),
+                    user=teacher,
+                )
+                published_assignment = await create_assignment(
+                    db=db,
+                    lesson_id=published_lesson["id"],
+                    assignment_data=AssignmentSchemaCreate(
+                        title="Design LMS models",
+                        max_score=12,
+                        is_published=True,
+                    ),
+                    user=teacher,
+                )
+
+                student_assignments = await get_lesson_assignments(
+                    db=db,
+                    lesson_id=published_lesson["id"],
+                    user=student,
+                )
+                assert [item["id"] for item in student_assignments] == [
+                    published_assignment["id"]
+                ]
+
+                with pytest.raises(HTTPException) as exc_info:
+                    await create_submission(
+                        db=db,
+                        assignment_id=hidden_assignment["id"],
+                        student_id=student.id,
+                        submission_data=SubmissionSchemaCreate(text="Too early"),
+                    )
+                assert exc_info.value.status_code == 403
+
+                submission = await create_submission(
+                    db=db,
+                    assignment_id=published_assignment["id"],
+                    student_id=student.id,
+                    submission_data=SubmissionSchemaCreate(text="Done"),
+                )
+                assert submission["status"] == SubmissionStatus.SUBMITTED
+
+                with pytest.raises(HTTPException) as exc_info:
+                    await grade_submission(
+                        db=db,
+                        submission_id=submission["id"],
+                        grader_id=student.id,
+                        grade_data=GradeSchemaCreate(score=11),
+                    )
+                assert exc_info.value.status_code == 403
+
+                grade = await grade_submission(
+                    db=db,
+                    submission_id=submission["id"],
+                    grader_id=teacher.id,
+                    grade_data=GradeSchemaCreate(score=11, feedback="Good work"),
+                )
+                assert grade["score"] == 11
+
+                with pytest.raises(HTTPException) as exc_info:
+                    await update_submission(
+                        db=db,
+                        submission_id=submission["id"],
+                        submission_data=SubmissionSchemaUpdate(text="Changed"),
+                        user=student,
+                    )
+                assert exc_info.value.detail == "Graded submission cannot be changed"
+
+                submissions = await get_assignment_submissions(
+                    db=db,
+                    assignment_id=published_assignment["id"],
+                    user=teacher,
+                )
+                assert [item["id"] for item in submissions] == [submission["id"]]
+
+                teacher_lessons = await get_course_lessons(
+                    db=db,
+                    course_id=course["id"],
+                    user=teacher,
+                )
+                assert [item["id"] for item in teacher_lessons] == [
+                    hidden_lesson["id"],
+                    published_lesson["id"],
+                ]
         finally:
             await engine.dispose()
 
     run_async(scenario())
 
 
-def test_create_class_requires_existing_related_records(tmp_path):
+def test_course_listing_is_scoped_to_enrollment(tmp_path):
     async def scenario():
         engine, async_session_maker = await make_session(tmp_path)
 
         try:
             async with async_session_maker() as db:
-                with pytest.raises(HTTPException) as exc_info:
-                    await create_class(
-                        db=db,
-                        class_data=ClassSchemaCreate(
-                            name="Python",
-                            users=[100],
-                            classrooms=[],
-                        ),
-                    )
+                teacher, student, outsider, course = await create_course_with_people(db)
 
-                assert exc_info.value.status_code == 404
-                assert exc_info.value.detail == "User not found"
+                student_courses = await get_all_courses(db=db, user=student)
+                outsider_courses = await get_all_courses(db=db, user=outsider)
+                teacher_courses = await get_all_courses(db=db, user=teacher)
 
-                class_count = await count_table_rows(db, Class.__table__)
-                assert class_count == 0
+                assert [item["id"] for item in student_courses] == [course["id"]]
+                assert outsider_courses == []
+                assert [item["id"] for item in teacher_courses] == [course["id"]]
         finally:
             await engine.dispose()
 

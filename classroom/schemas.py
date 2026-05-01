@@ -1,9 +1,14 @@
-from typing import Optional
+from datetime import datetime
 
-from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field
+from pydantic import BaseModel as PydanticBaseModel, ConfigDict
 
+from enums import (
+    ClassMaterialsType,
+    EnrollmentRole,
+    EnrollmentStatus,
+    SubmissionStatus,
+)
 from user.schemas import UserRead
-from enums import ClassMaterialsType
 
 
 class IdConfigModelSchema(PydanticBaseModel):
@@ -12,43 +17,169 @@ class IdConfigModelSchema(PydanticBaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ClassroomBaseSchema(PydanticBaseModel):
-    name: str
-    description: Optional[str] = None
+class CourseBaseSchema(PydanticBaseModel):
+    title: str
+    description: str | None = None
+    is_active: bool = True
 
 
-class ClassroomSchemaRead(IdConfigModelSchema, ClassroomBaseSchema):
+class CourseSchemaCreate(CourseBaseSchema):
     pass
 
 
-class ClassBaseSchema(PydanticBaseModel):
-    name: str
+class CourseSchemaUpdate(PydanticBaseModel):
+    title: str | None = None
+    description: str | None = None
+    is_active: bool | None = None
 
 
-class ClassSchemaCreate(ClassBaseSchema):
-    users: list[int] = Field(default_factory=list)
-    classrooms: list[int] = Field(default_factory=list)
+class CourseSchemaRead(IdConfigModelSchema, CourseBaseSchema):
+    created_at: datetime
+    updated_at: datetime
 
 
-class ClassSchemaUpdate(PydanticBaseModel):
-    name: Optional[str] = None
-
-
-class ClassUserLinkSchema(PydanticBaseModel):
+class EnrollmentSchemaCreate(PydanticBaseModel):
     user_id: int
+    role: EnrollmentRole = EnrollmentRole.STUDENT
+    status: EnrollmentStatus = EnrollmentStatus.ACTIVE
 
 
-class ClassClassroomLinkSchema(PydanticBaseModel):
-    classroom_id: int
+class EnrollmentSchemaUpdate(PydanticBaseModel):
+    role: EnrollmentRole | None = None
+    status: EnrollmentStatus | None = None
 
 
-class ClassSchemaRead(IdConfigModelSchema, ClassBaseSchema):
-    users: list[UserRead] = Field(default_factory=list)
-    classrooms: list[ClassroomSchemaRead] = Field(default_factory=list)
+class EnrollmentSchemaRead(IdConfigModelSchema):
+    course_id: int
+    user_id: int
+    role: EnrollmentRole
+    status: EnrollmentStatus
+    created_at: datetime
+    user: UserRead
 
 
-class ClassroomSchemaCreate(ClassroomBaseSchema):
+class LessonBaseSchema(PydanticBaseModel):
+    title: str
+    description: str | None = None
+    position: int = 0
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_published: bool = False
+
+
+class LessonSchemaCreate(LessonBaseSchema):
     pass
+
+
+class LessonSchemaUpdate(PydanticBaseModel):
+    title: str | None = None
+    description: str | None = None
+    position: int | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    is_published: bool | None = None
+
+
+class LessonSchemaRead(IdConfigModelSchema, LessonBaseSchema):
+    course_id: int
+    created_at: datetime
+
+
+class MaterialBaseSchema(PydanticBaseModel):
+    title: str | None = None
+    description: str | None = None
+    material_type: ClassMaterialsType
+    lesson_id: int
+
+
+class MaterialSchemaCreate(MaterialBaseSchema):
+    pass
+
+
+class MaterialSchemaRead(IdConfigModelSchema, MaterialBaseSchema):
+    user_id: int
+    created_at: datetime
+    updated_at: datetime | None = None
+
+
+class AssignmentBaseSchema(PydanticBaseModel):
+    title: str
+    description: str | None = None
+    deadline: datetime | None = None
+    max_score: float = 100
+    is_published: bool = False
+
+
+class AssignmentSchemaCreate(AssignmentBaseSchema):
+    pass
+
+
+class AssignmentSchemaUpdate(PydanticBaseModel):
+    title: str | None = None
+    description: str | None = None
+    deadline: datetime | None = None
+    max_score: float | None = None
+    is_published: bool | None = None
+
+
+class AssignmentSchemaRead(IdConfigModelSchema, AssignmentBaseSchema):
+    lesson_id: int
+    created_at: datetime
+
+
+class SubmissionSchemaCreate(PydanticBaseModel):
+    text: str | None = None
+    status: SubmissionStatus = SubmissionStatus.SUBMITTED
+
+
+class SubmissionSchemaUpdate(PydanticBaseModel):
+    text: str | None = None
+    status: SubmissionStatus | None = None
+
+
+class SubmissionSchemaRead(IdConfigModelSchema):
+    assignment_id: int
+    student_id: int
+    text: str | None = None
+    status: SubmissionStatus
+    submitted_at: datetime
+    graded_at: datetime | None = None
+
+
+class GradeSchemaCreate(PydanticBaseModel):
+    score: float
+    feedback: str | None = None
+
+
+class GradeSchemaRead(IdConfigModelSchema):
+    submission_id: int
+    grader_id: int
+    score: float
+    feedback: str | None = None
+    created_at: datetime
+
+
+class UploadedFileSchemaCreate(PydanticBaseModel):
+    filename: str
+    content_type: str | None = None
+    size: int = 0
+    storage_path: str
+
+
+class UploadedFileSchemaRead(IdConfigModelSchema, UploadedFileSchemaCreate):
+    owner_id: int
+    created_at: datetime
+
+
+class AnnouncementSchemaCreate(PydanticBaseModel):
+    title: str
+    message: str
+
+
+class AnnouncementSchemaRead(IdConfigModelSchema, AnnouncementSchemaCreate):
+    course_id: int
+    author_id: int
+    created_at: datetime
 
 
 class FileMaterialBaseSchema(PydanticBaseModel):
@@ -56,16 +187,6 @@ class FileMaterialBaseSchema(PydanticBaseModel):
 
 
 class FileMaterialSchemaCreate(IdConfigModelSchema, FileMaterialBaseSchema):
-    pass
-
-
-class MateriaBaseSchema(PydanticBaseModel):
-    description: str
-    material_type: ClassMaterialsType
-    file_material: list[FileMaterialBaseSchema]
-
-
-class MaterialSchemaCreate(IdConfigModelSchema, MateriaBaseSchema):
     pass
 
 
@@ -88,7 +209,7 @@ class FileHomeWorkSchemaCreate(IdConfigModelSchema, FileHomeWorkBaseSchema):
 
 class HomeWorkBaseSchema(PydanticBaseModel):
     material: int
-    file_homework: Optional[list[FileHomeWorkSchemaCreate]]
+    file_homework: list[FileHomeWorkSchemaCreate] | None = None
 
 
 class HomeWorkSchemaCreate(IdConfigModelSchema, HomeWorkBaseSchema):
