@@ -7,16 +7,16 @@ from fastapi_users.authentication import (
 )
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
-SECRET = os.environ.get('SECRET_KEY', "Secret")
+SECRET = os.environ.get("SECRET_KEY", "Secret")
 
 cookie_transport = CookieTransport(
     cookie_max_age=4000,
     cookie_name="user_classroom",
     cookie_secure=False,
 )
-
 
 
 def get_jwt_strategy() -> JWTStrategy:

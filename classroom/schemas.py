@@ -1,43 +1,53 @@
 from typing import Optional
 
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field
 
 from user.schemas import UserRead
 from enums import ClassMaterialsType
 
 
-class IdConfigModelSchema:
+class IdConfigModelSchema(PydanticBaseModel):
     id: int
 
-    class Config:
-        from_attributes = True
-
-
-
-class ClassBaseSchema(PydanticBaseModel):
-    name: str
-    users: list[UserRead]
-
-
-class ClassSchemaCreate(ClassBaseSchema):
-    users: Optional[list[int]] = []
-
-    class Config:
-        from_attributes = True
-
-class ClassSchemaRead(IdConfigModelSchema, ClassBaseSchema):
-    pass
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ClassroomBaseSchema(PydanticBaseModel):
     name: str
-    description: str
+    description: Optional[str] = None
 
 
-class ClassroomSchemaCreate(IdConfigModelSchema, ClassroomBaseSchema):
+class ClassroomSchemaRead(IdConfigModelSchema, ClassroomBaseSchema):
+    pass
+
+
+class ClassBaseSchema(PydanticBaseModel):
+    name: str
+
+
+class ClassSchemaCreate(ClassBaseSchema):
+    users: list[int] = Field(default_factory=list)
+    classrooms: list[int] = Field(default_factory=list)
+
+
+class ClassSchemaUpdate(PydanticBaseModel):
+    name: Optional[str] = None
+
+
+class ClassUserLinkSchema(PydanticBaseModel):
+    user_id: int
+
+
+class ClassClassroomLinkSchema(PydanticBaseModel):
+    classroom_id: int
+
+
+class ClassSchemaRead(IdConfigModelSchema, ClassBaseSchema):
+    users: list[UserRead] = Field(default_factory=list)
+    classrooms: list[ClassroomSchemaRead] = Field(default_factory=list)
+
+
+class ClassroomSchemaCreate(ClassroomBaseSchema):
     pass
 
 

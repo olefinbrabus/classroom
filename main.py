@@ -27,9 +27,7 @@ app.include_router(
     tags=["register"],
 )
 
-app.include_router(
-    classroom_router, prefix="/classroom", tags=["classroom"]
-)
+app.include_router(classroom_router, prefix="/classroom", tags=["classroom"])
 
 
 @app.get("/protected-route")

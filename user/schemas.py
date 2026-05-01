@@ -13,7 +13,7 @@ class UserRead(schemas.BaseUser[int]):
     is_active: bool
     is_superuser: bool
     is_verified: bool
-    is_teacher:bool
+    is_teacher: bool
 
     class Config:
         from_attributes = True
@@ -41,3 +41,9 @@ class UserUpdate(schemas.BaseUserUpdate):
     is_superuser: Optional[bool] = False
     is_verified: Optional[bool] = False
     is_teacher: Optional[bool] = False
+
+
+class SuperUserCreate(UserCreate):
+    is_superuser: bool = True
+    is_verified: bool = True
+    is_teacher: bool = True

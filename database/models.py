@@ -63,6 +63,10 @@ class Class(BaseModel):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     users: Mapped[list[User]] = relationship(secondary=class_to_user_table)
+    classrooms: Mapped[list["Classroom"]] = relationship(
+        secondary=class_to_classroom_table,
+        back_populates="classes",
+    )
 
 
 class Classroom(BaseModel):
@@ -70,7 +74,10 @@ class Classroom(BaseModel):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str] = mapped_column(String(1024), nullable=True)
-    classes: Mapped[list[Class]] = relationship(secondary=class_to_classroom_table)
+    classes: Mapped[list[Class]] = relationship(
+        secondary=class_to_classroom_table,
+        back_populates="classrooms",
+    )
 
 
 class Material(BaseModel):
