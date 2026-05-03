@@ -30,6 +30,21 @@ from classroom.schemas import (
     UploadedFileSchemaCreate,
     UploadedFileSchemaRead,
 )
+from classroom.services import (
+    get_assignment_course_id,
+    get_grade_for_submission,
+    get_lesson_course_id,
+    get_submission_course_id,
+    is_course_teacher,
+    is_global_teacher,
+    require_assignment_published,
+    require_course_access,
+    require_course_teacher,
+    require_lesson_published_or_teacher,
+    require_student_enrollment,
+    require_submission_editable,
+    require_submission_owner,
+)
 from database.models import (
     Announcement,
     Assignment,
@@ -90,82 +105,6 @@ async def get_assignment_or_404(db: AsyncSession, assignment_id: int) -> Assignm
 
 async def get_submission_or_404(db: AsyncSession, submission_id: int) -> Submission:
     return await get_or_404(db, Submission, submission_id, "Submission not found")
-
-
-def is_global_teacher(user: User) -> bool:
-    return bool(user.is_superuser or user.is_teacher)
-
-
-async def get_active_enrollment(
-    db: AsyncSession,
-    course_id: int,
-    user_id: int,
-) -> Enrollment | None:
-    result = await db.execute(
-        select(Enrollment).where(
-            Enrollment.course_id == course_id,
-            Enrollment.user_id == user_id,
-            Enrollment.status == EnrollmentStatus.ACTIVE,
-        )
-    )
-    return result.scalar_one_or_none()
-
-
-async def is_course_teacher(db: AsyncSession, course_id: int, user: User) -> bool:
-    if is_global_teacher(user):
-        return True
-
-    enrollment = await get_active_enrollment(db, course_id, user.id)
-    return enrollment is not None and enrollment.role in (
-        EnrollmentRole.TEACHER,
-        EnrollmentRole.ASSISTANT,
-    )
-
-
-async def require_course_access(db: AsyncSession, course_id: int, user: User) -> None:
-    if is_global_teacher(user):
-        return
-
-    if await get_active_enrollment(db, course_id, user.id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Course access denied",
-        )
-
-
-async def require_course_teacher(db: AsyncSession, course_id: int, user: User) -> None:
-    if not await is_course_teacher(db, course_id, user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Teacher access required",
-        )
-
-
-async def get_lesson_course_id(db: AsyncSession, lesson_id: int) -> int:
-    lesson = await get_lesson_or_404(db=db, lesson_id=lesson_id)
-    return lesson.course_id
-
-
-async def get_assignment_course_id(db: AsyncSession, assignment_id: int) -> int:
-    assignment = await get_or_404(
-        db,
-        Assignment,
-        assignment_id,
-        "Assignment not found",
-        (selectinload(Assignment.lesson),),
-    )
-    return assignment.lesson.course_id
-
-
-async def get_submission_course_id(db: AsyncSession, submission_id: int) -> int:
-    submission = await get_or_404(
-        db,
-        Submission,
-        submission_id,
-        "Submission not found",
-        (selectinload(Submission.assignment).selectinload(Assignment.lesson),),
-    )
-    return submission.assignment.lesson.course_id
 
 
 async def get_all_courses(db: AsyncSession, user: User):
@@ -320,15 +259,10 @@ async def get_course_lessons(db: AsyncSession, course_id: int, user: User):
 async def get_lesson(db: AsyncSession, lesson_id: int, user: User):
     lesson = await get_lesson_or_404(db=db, lesson_id=lesson_id)
     await require_course_access(db=db, course_id=lesson.course_id, user=user)
-    if not lesson.is_published and not await is_course_teacher(
-        db=db,
-        course_id=lesson.course_id,
-        user=user,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Lesson is not published",
-        )
+    require_lesson_published_or_teacher(
+        lesson,
+        await is_course_teacher(db=db, course_id=lesson.course_id, user=user),
+    )
     return serialize(LessonSchemaRead, lesson)
 
 
@@ -446,18 +380,9 @@ async def create_submission(
     submission_data: SubmissionSchemaCreate,
 ):
     course_id = await get_assignment_course_id(db=db, assignment_id=assignment_id)
-    enrollment = await get_active_enrollment(db, course_id, student_id)
-    if enrollment is None or enrollment.role != EnrollmentRole.STUDENT:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Student enrollment required",
-        )
+    await require_student_enrollment(db, course_id, student_id)
     assignment = await get_assignment_or_404(db=db, assignment_id=assignment_id)
-    if not assignment.is_published:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Assignment is not published",
-        )
+    require_assignment_published(assignment)
     await get_user_or_404(db=db, user_id=student_id)
     submission = Submission(
         assignment_id=assignment_id,
@@ -477,16 +402,8 @@ async def update_submission(
     user: User,
 ):
     submission = await get_submission_or_404(db=db, submission_id=submission_id)
-    if submission.student_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Submission owner required",
-        )
-    if submission.status == SubmissionStatus.GRADED:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Graded submission cannot be changed",
-        )
+    require_submission_owner(submission, user)
+    require_submission_editable(submission)
     for field, value in submission_data.model_dump(exclude_unset=True).items():
         setattr(submission, field, value)
     await commit_or_rollback(db)
@@ -504,8 +421,7 @@ async def grade_submission(
     grader = await get_user_or_404(db=db, user_id=grader_id)
     await require_course_teacher(db=db, course_id=course_id, user=grader)
     submission = await get_submission_or_404(db=db, submission_id=submission_id)
-    result = await db.execute(select(Grade).where(Grade.submission_id == submission_id))
-    grade = result.scalar_one_or_none()
+    grade = await get_grade_for_submission(db=db, submission_id=submission_id)
     if grade is None:
         grade = Grade(
             submission_id=submission_id,
