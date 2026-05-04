@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel as PydanticBaseModel, ConfigDict
+from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field
 
 from enums import (
     ClassMaterialsType,
@@ -18,7 +18,7 @@ class IdConfigModelSchema(PydanticBaseModel):
 
 
 class CourseBaseSchema(PydanticBaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=255)
     description: str | None = None
     is_active: bool = True
 
@@ -39,7 +39,7 @@ class CourseSchemaRead(IdConfigModelSchema, CourseBaseSchema):
 
 
 class EnrollmentSchemaCreate(PydanticBaseModel):
-    user_id: int
+    user_id: int = Field(gt=0)
     role: EnrollmentRole = EnrollmentRole.STUDENT
     status: EnrollmentStatus = EnrollmentStatus.ACTIVE
 
@@ -59,9 +59,9 @@ class EnrollmentSchemaRead(IdConfigModelSchema):
 
 
 class LessonBaseSchema(PydanticBaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=255)
     description: str | None = None
-    position: int = 0
+    position: int = Field(default=0, ge=0)
     starts_at: datetime | None = None
     ends_at: datetime | None = None
     is_published: bool = False
@@ -86,10 +86,10 @@ class LessonSchemaRead(IdConfigModelSchema, LessonBaseSchema):
 
 
 class MaterialBaseSchema(PydanticBaseModel):
-    title: str | None = None
+    title: str | None = Field(default=None, max_length=255)
     description: str | None = None
     material_type: ClassMaterialsType
-    lesson_id: int
+    lesson_id: int = Field(gt=0)
 
 
 class MaterialSchemaCreate(MaterialBaseSchema):
@@ -103,10 +103,10 @@ class MaterialSchemaRead(IdConfigModelSchema, MaterialBaseSchema):
 
 
 class AssignmentBaseSchema(PydanticBaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=255)
     description: str | None = None
     deadline: datetime | None = None
-    max_score: float = 100
+    max_score: float = Field(default=100, gt=0)
     is_published: bool = False
 
 
@@ -147,7 +147,7 @@ class SubmissionSchemaRead(IdConfigModelSchema):
 
 
 class GradeSchemaCreate(PydanticBaseModel):
-    score: float
+    score: float = Field(ge=0)
     feedback: str | None = None
 
 
@@ -160,10 +160,10 @@ class GradeSchemaRead(IdConfigModelSchema):
 
 
 class UploadedFileSchemaCreate(PydanticBaseModel):
-    filename: str
+    filename: str = Field(min_length=1, max_length=255)
     content_type: str | None = None
-    size: int = 0
-    storage_path: str
+    size: int = Field(default=0, ge=0)
+    storage_path: str = Field(min_length=1, max_length=1024)
 
 
 class UploadedFileSchemaRead(IdConfigModelSchema, UploadedFileSchemaCreate):
@@ -172,8 +172,8 @@ class UploadedFileSchemaRead(IdConfigModelSchema, UploadedFileSchemaCreate):
 
 
 class AnnouncementSchemaCreate(PydanticBaseModel):
-    title: str
-    message: str
+    title: str = Field(min_length=1, max_length=255)
+    message: str = Field(min_length=1)
 
 
 class AnnouncementSchemaRead(IdConfigModelSchema, AnnouncementSchemaCreate):

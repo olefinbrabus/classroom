@@ -1,6 +1,8 @@
 from datetime import datetime
 from unittest.mock import AsyncMock
 
+import pytest
+
 
 def course_response_payload(course_id: int = 1):
     timestamp = datetime(2026, 5, 1).isoformat()
@@ -154,3 +156,31 @@ def test_grade_submission_uses_current_user_as_grader(
     assert call_kwargs["submission_id"] == 4
     assert call_kwargs["grader_id"] == 1
     assert call_kwargs["grade_data"].model_dump() == payload
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "payload"),
+    [
+        ("post", "/classroom/courses/", {"title": ""}),
+        (
+            "post",
+            "/classroom/courses/1/lessons/",
+            {"title": "Intro", "position": -1},
+        ),
+        (
+            "post",
+            "/classroom/lessons/1/assignments/",
+            {"title": "Homework", "max_score": 0},
+        ),
+        ("post", "/classroom/submissions/1/grade/", {"score": -1}),
+        (
+            "post",
+            "/classroom/files/",
+            {"filename": "", "size": -1, "storage_path": ""},
+        ),
+    ],
+)
+def test_router_rejects_invalid_payloads(client, method, url, payload):
+    response = getattr(client, method)(url, json=payload)
+
+    assert response.status_code == 422

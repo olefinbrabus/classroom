@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from database.models import Assignment, Enrollment, Grade, Lesson, Submission, User
+from database.models import Assignment, Enrollment, Lesson, Submission, User
 from enums import EnrollmentRole, EnrollmentStatus, SubmissionStatus
 
 
@@ -105,6 +105,17 @@ def require_assignment_published(assignment: Assignment) -> None:
         )
 
 
+def require_grade_within_assignment_score(
+    assignment: Assignment,
+    score: float,
+) -> None:
+    if score > assignment.max_score:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Grade score cannot exceed assignment max score",
+        )
+
+
 async def get_lesson_course_id(db: AsyncSession, lesson_id: int) -> int:
     result = await db.execute(select(Lesson.course_id).where(Lesson.id == lesson_id))
     course_id = result.scalar_one_or_none()
@@ -144,13 +155,3 @@ async def get_submission_course_id(db: AsyncSession, submission_id: int) -> int:
             detail="Submission not found",
         )
     return submission.assignment.lesson.course_id
-
-
-async def get_grade_for_submission(
-    db: AsyncSession,
-    submission_id: int,
-) -> Grade | None:
-    result = await db.execute(
-        select(Grade).where(Grade.submission_id == submission_id)
-    )
-    return result.scalar_one_or_none()

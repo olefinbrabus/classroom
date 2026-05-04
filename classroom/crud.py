@@ -1,38 +1,39 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from classroom.repositories import (
+    commit_or_rollback,
+    get_grade_for_submission,
+    get_or_404,
+    list_all_courses,
+    list_assignment_submissions,
+    list_course_enrollments,
+    list_course_lessons,
+    list_courses_for_user,
+    list_lesson_assignments,
+    list_lesson_materials,
+)
 from classroom.schemas import (
     AnnouncementSchemaCreate,
-    AnnouncementSchemaRead,
     AssignmentSchemaCreate,
-    AssignmentSchemaRead,
     AssignmentSchemaUpdate,
     CourseSchemaCreate,
-    CourseSchemaRead,
     CourseSchemaUpdate,
     EnrollmentSchemaCreate,
-    EnrollmentSchemaRead,
     EnrollmentSchemaUpdate,
     GradeSchemaCreate,
-    GradeSchemaRead,
     LessonSchemaCreate,
-    LessonSchemaRead,
     LessonSchemaUpdate,
     MaterialSchemaCreate,
-    MaterialSchemaRead,
     SubmissionSchemaCreate,
-    SubmissionSchemaRead,
     SubmissionSchemaUpdate,
     UploadedFileSchemaCreate,
-    UploadedFileSchemaRead,
 )
 from classroom.services import (
     get_assignment_course_id,
-    get_grade_for_submission,
     get_lesson_course_id,
     get_submission_course_id,
     is_course_teacher,
@@ -40,6 +41,7 @@ from classroom.services import (
     require_assignment_published,
     require_course_access,
     require_course_teacher,
+    require_grade_within_assignment_score,
     require_lesson_published_or_teacher,
     require_student_enrollment,
     require_submission_editable,
@@ -66,27 +68,6 @@ course_options = (
 )
 
 
-def serialize(schema, obj) -> dict:
-    return schema.model_validate(obj).model_dump()
-
-
-async def commit_or_rollback(db: AsyncSession) -> None:
-    try:
-        await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
-
-
-async def get_or_404(db: AsyncSession, model, obj_id: int, detail: str, options=()):
-    query = select(model).where(model.id == obj_id).options(*options)
-    result = await db.execute(query)
-    obj = result.scalar_one_or_none()
-    if obj is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
-    return obj
-
-
 async def get_user_or_404(db: AsyncSession, user_id: int) -> User:
     return await get_or_404(db, User, user_id, "User not found")
 
@@ -109,24 +90,13 @@ async def get_submission_or_404(db: AsyncSession, submission_id: int) -> Submiss
 
 async def get_all_courses(db: AsyncSession, user: User):
     if is_global_teacher(user):
-        result = await db.execute(select(Course).order_by(Course.id))
-    else:
-        result = await db.execute(
-            select(Course)
-            .join(Enrollment)
-            .where(
-                Enrollment.user_id == user.id,
-                Enrollment.status == EnrollmentStatus.ACTIVE,
-            )
-            .order_by(Course.id)
-        )
-    return [serialize(CourseSchemaRead, course) for course in result.scalars().all()]
+        return await list_all_courses(db)
+    return await list_courses_for_user(db, user.id)
 
 
 async def get_course(db: AsyncSession, course_id: int, user: User):
     await require_course_access(db=db, course_id=course_id, user=user)
-    course = await get_or_404(db, Course, course_id, "Course not found", course_options)
-    return serialize(CourseSchemaRead, course)
+    return await get_or_404(db, Course, course_id, "Course not found", course_options)
 
 
 async def create_course(db: AsyncSession, course_data: CourseSchemaCreate, user: User):
@@ -148,7 +118,7 @@ async def create_course(db: AsyncSession, course_data: CourseSchemaCreate, user:
     )
     await commit_or_rollback(db)
     await db.refresh(course)
-    return serialize(CourseSchemaRead, course)
+    return course
 
 
 async def update_course(
@@ -163,7 +133,7 @@ async def update_course(
         setattr(course, field, value)
     await commit_or_rollback(db)
     await db.refresh(course)
-    return serialize(CourseSchemaRead, course)
+    return course
 
 
 async def delete_course(db: AsyncSession, course_id: int, user: User):
@@ -192,22 +162,13 @@ async def enroll_user(
     db.add(enrollment)
     await commit_or_rollback(db)
     await db.refresh(enrollment, attribute_names=["user"])
-    return serialize(EnrollmentSchemaRead, enrollment)
+    return enrollment
 
 
 async def get_course_enrollments(db: AsyncSession, course_id: int, user: User):
     await require_course_teacher(db=db, course_id=course_id, user=user)
     await get_course_or_404(db=db, course_id=course_id)
-    result = await db.execute(
-        select(Enrollment)
-        .where(Enrollment.course_id == course_id)
-        .options(selectinload(Enrollment.user))
-        .order_by(Enrollment.id)
-    )
-    return [
-        serialize(EnrollmentSchemaRead, enrollment)
-        for enrollment in result.scalars().all()
-    ]
+    return await list_course_enrollments(db, course_id)
 
 
 async def update_enrollment(
@@ -228,7 +189,7 @@ async def update_enrollment(
         setattr(enrollment, field, value)
     await commit_or_rollback(db)
     await db.refresh(enrollment, attribute_names=["user"])
-    return serialize(EnrollmentSchemaRead, enrollment)
+    return enrollment
 
 
 async def create_lesson(
@@ -243,17 +204,22 @@ async def create_lesson(
     db.add(lesson)
     await commit_or_rollback(db)
     await db.refresh(lesson)
-    return serialize(LessonSchemaRead, lesson)
+    return lesson
 
 
 async def get_course_lessons(db: AsyncSession, course_id: int, user: User):
     await require_course_access(db=db, course_id=course_id, user=user)
     await get_course_or_404(db=db, course_id=course_id)
-    query = select(Lesson).where(Lesson.course_id == course_id)
-    if not await is_course_teacher(db=db, course_id=course_id, user=user):
-        query = query.where(Lesson.is_published.is_(True))
-    result = await db.execute(query.order_by(Lesson.position, Lesson.id))
-    return [serialize(LessonSchemaRead, lesson) for lesson in result.scalars().all()]
+    only_published = not await is_course_teacher(
+        db=db,
+        course_id=course_id,
+        user=user,
+    )
+    return await list_course_lessons(
+        db,
+        course_id,
+        only_published=only_published,
+    )
 
 
 async def get_lesson(db: AsyncSession, lesson_id: int, user: User):
@@ -263,7 +229,7 @@ async def get_lesson(db: AsyncSession, lesson_id: int, user: User):
         lesson,
         await is_course_teacher(db=db, course_id=lesson.course_id, user=user),
     )
-    return serialize(LessonSchemaRead, lesson)
+    return lesson
 
 
 async def delete_lesson(db: AsyncSession, lesson_id: int, user: User):
@@ -277,10 +243,7 @@ async def delete_lesson(db: AsyncSession, lesson_id: int, user: User):
 async def get_lesson_materials(db: AsyncSession, lesson_id: int, user: User):
     course_id = await get_lesson_course_id(db=db, lesson_id=lesson_id)
     await require_course_access(db=db, course_id=course_id, user=user)
-    result = await db.execute(
-        select(Material).where(Material.lesson_id == lesson_id).order_by(Material.id)
-    )
-    return [serialize(MaterialSchemaRead, material) for material in result.scalars()]
+    return await list_lesson_materials(db, lesson_id)
 
 
 async def update_lesson(
@@ -295,7 +258,7 @@ async def update_lesson(
         setattr(lesson, field, value)
     await commit_or_rollback(db)
     await db.refresh(lesson)
-    return serialize(LessonSchemaRead, lesson)
+    return lesson
 
 
 async def create_material(
@@ -311,7 +274,7 @@ async def create_material(
     db.add(material)
     await commit_or_rollback(db)
     await db.refresh(material)
-    return serialize(MaterialSchemaRead, material)
+    return material
 
 
 async def create_assignment(
@@ -326,7 +289,7 @@ async def create_assignment(
     db.add(assignment)
     await commit_or_rollback(db)
     await db.refresh(assignment)
-    return serialize(AssignmentSchemaRead, assignment)
+    return assignment
 
 
 async def update_assignment(
@@ -345,20 +308,22 @@ async def update_assignment(
         setattr(assignment, field, value)
     await commit_or_rollback(db)
     await db.refresh(assignment)
-    return serialize(AssignmentSchemaRead, assignment)
+    return assignment
 
 
 async def get_lesson_assignments(db: AsyncSession, lesson_id: int, user: User):
     course_id = await get_lesson_course_id(db=db, lesson_id=lesson_id)
     await require_course_access(db=db, course_id=course_id, user=user)
-    query = select(Assignment).where(Assignment.lesson_id == lesson_id)
-    if not await is_course_teacher(db=db, course_id=course_id, user=user):
-        query = query.where(Assignment.is_published.is_(True))
-    result = await db.execute(query.order_by(Assignment.id))
-    return [
-        serialize(AssignmentSchemaRead, assignment)
-        for assignment in result.scalars().all()
-    ]
+    only_published = not await is_course_teacher(
+        db=db,
+        course_id=course_id,
+        user=user,
+    )
+    return await list_lesson_assignments(
+        db,
+        lesson_id,
+        only_published=only_published,
+    )
 
 
 async def delete_assignment(db: AsyncSession, assignment_id: int, user: User):
@@ -392,7 +357,7 @@ async def create_submission(
     db.add(submission)
     await commit_or_rollback(db)
     await db.refresh(submission)
-    return serialize(SubmissionSchemaRead, submission)
+    return submission
 
 
 async def update_submission(
@@ -408,7 +373,7 @@ async def update_submission(
         setattr(submission, field, value)
     await commit_or_rollback(db)
     await db.refresh(submission)
-    return serialize(SubmissionSchemaRead, submission)
+    return submission
 
 
 async def grade_submission(
@@ -421,6 +386,11 @@ async def grade_submission(
     grader = await get_user_or_404(db=db, user_id=grader_id)
     await require_course_teacher(db=db, course_id=course_id, user=grader)
     submission = await get_submission_or_404(db=db, submission_id=submission_id)
+    assignment = await get_assignment_or_404(
+        db=db,
+        assignment_id=submission.assignment_id,
+    )
+    require_grade_within_assignment_score(assignment, grade_data.score)
     grade = await get_grade_for_submission(db=db, submission_id=submission_id)
     if grade is None:
         grade = Grade(
@@ -438,7 +408,7 @@ async def grade_submission(
     submission.graded_at = datetime.now(timezone.utc)
     await commit_or_rollback(db)
     await db.refresh(grade)
-    return serialize(GradeSchemaRead, grade)
+    return grade
 
 
 async def get_assignment_submissions(
@@ -448,15 +418,7 @@ async def get_assignment_submissions(
 ):
     course_id = await get_assignment_course_id(db=db, assignment_id=assignment_id)
     await require_course_teacher(db=db, course_id=course_id, user=user)
-    result = await db.execute(
-        select(Submission)
-        .where(Submission.assignment_id == assignment_id)
-        .order_by(Submission.id)
-    )
-    return [
-        serialize(SubmissionSchemaRead, submission)
-        for submission in result.scalars().all()
-    ]
+    return await list_assignment_submissions(db, assignment_id)
 
 
 async def create_uploaded_file(
@@ -469,7 +431,7 @@ async def create_uploaded_file(
     db.add(uploaded_file)
     await commit_or_rollback(db)
     await db.refresh(uploaded_file)
-    return serialize(UploadedFileSchemaRead, uploaded_file)
+    return uploaded_file
 
 
 async def create_announcement(
@@ -490,4 +452,4 @@ async def create_announcement(
     db.add(announcement)
     await commit_or_rollback(db)
     await db.refresh(announcement)
-    return serialize(AnnouncementSchemaRead, announcement)
+    return announcement

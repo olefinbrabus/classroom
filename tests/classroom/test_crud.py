@@ -89,7 +89,7 @@ async def create_course_with_people(db):
     )
     await enroll_user(
         db=db,
-        course_id=course["id"],
+        course_id=course.id,
         enrollment_data=EnrollmentSchemaCreate(
             user_id=student.id,
             role=EnrollmentRole.STUDENT,
@@ -109,7 +109,7 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
 
                 hidden_lesson = await create_lesson(
                     db=db,
-                    course_id=course["id"],
+                    course_id=course.id,
                     lesson_data=LessonSchemaCreate(
                         title="Draft lesson",
                         position=0,
@@ -119,7 +119,7 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
                 )
                 published_lesson = await create_lesson(
                     db=db,
-                    course_id=course["id"],
+                    course_id=course.id,
                     lesson_data=LessonSchemaCreate(
                         title="Published lesson",
                         position=1,
@@ -130,17 +130,17 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
 
                 student_lessons = await get_course_lessons(
                     db=db,
-                    course_id=course["id"],
+                    course_id=course.id,
                     user=student,
                 )
-                assert [lesson["id"] for lesson in student_lessons] == [
-                    published_lesson["id"]
+                assert [lesson.id for lesson in student_lessons] == [
+                    published_lesson.id
                 ]
 
                 with pytest.raises(HTTPException) as exc_info:
                     await get_course_lessons(
                         db=db,
-                        course_id=course["id"],
+                        course_id=course.id,
                         user=outsider,
                     )
                 assert exc_info.value.status_code == 403
@@ -152,15 +152,15 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
                         title="Model guide",
                         description="Read before homework",
                         material_type=ClassMaterialsType.MATERIALS,
-                        lesson_id=published_lesson["id"],
+                        lesson_id=published_lesson.id,
                     ),
                     user=teacher,
                 )
-                assert material["lesson_id"] == published_lesson["id"]
+                assert material.lesson_id == published_lesson.id
 
                 hidden_assignment = await create_assignment(
                     db=db,
-                    lesson_id=published_lesson["id"],
+                    lesson_id=published_lesson.id,
                     assignment_data=AssignmentSchemaCreate(
                         title="Hidden assignment",
                         is_published=False,
@@ -169,7 +169,7 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
                 )
                 published_assignment = await create_assignment(
                     db=db,
-                    lesson_id=published_lesson["id"],
+                    lesson_id=published_lesson.id,
                     assignment_data=AssignmentSchemaCreate(
                         title="Design LMS models",
                         max_score=12,
@@ -180,17 +180,17 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
 
                 student_assignments = await get_lesson_assignments(
                     db=db,
-                    lesson_id=published_lesson["id"],
+                    lesson_id=published_lesson.id,
                     user=student,
                 )
-                assert [item["id"] for item in student_assignments] == [
-                    published_assignment["id"]
+                assert [item.id for item in student_assignments] == [
+                    published_assignment.id
                 ]
 
                 with pytest.raises(HTTPException) as exc_info:
                     await create_submission(
                         db=db,
-                        assignment_id=hidden_assignment["id"],
+                        assignment_id=hidden_assignment.id,
                         student_id=student.id,
                         submission_data=SubmissionSchemaCreate(text="Too early"),
                     )
@@ -198,33 +198,42 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
 
                 submission = await create_submission(
                     db=db,
-                    assignment_id=published_assignment["id"],
+                    assignment_id=published_assignment.id,
                     student_id=student.id,
                     submission_data=SubmissionSchemaCreate(text="Done"),
                 )
-                assert submission["status"] == SubmissionStatus.SUBMITTED
+                assert submission.status == SubmissionStatus.SUBMITTED
 
                 with pytest.raises(HTTPException) as exc_info:
                     await grade_submission(
                         db=db,
-                        submission_id=submission["id"],
+                        submission_id=submission.id,
                         grader_id=student.id,
                         grade_data=GradeSchemaCreate(score=11),
                     )
                 assert exc_info.value.status_code == 403
 
+                with pytest.raises(HTTPException) as exc_info:
+                    await grade_submission(
+                        db=db,
+                        submission_id=submission.id,
+                        grader_id=teacher.id,
+                        grade_data=GradeSchemaCreate(score=13),
+                    )
+                assert exc_info.value.status_code == 422
+
                 grade = await grade_submission(
                     db=db,
-                    submission_id=submission["id"],
+                    submission_id=submission.id,
                     grader_id=teacher.id,
                     grade_data=GradeSchemaCreate(score=11, feedback="Good work"),
                 )
-                assert grade["score"] == 11
+                assert grade.score == 11
 
                 with pytest.raises(HTTPException) as exc_info:
                     await update_submission(
                         db=db,
-                        submission_id=submission["id"],
+                        submission_id=submission.id,
                         submission_data=SubmissionSchemaUpdate(text="Changed"),
                         user=student,
                     )
@@ -232,19 +241,19 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
 
                 submissions = await get_assignment_submissions(
                     db=db,
-                    assignment_id=published_assignment["id"],
+                    assignment_id=published_assignment.id,
                     user=teacher,
                 )
-                assert [item["id"] for item in submissions] == [submission["id"]]
+                assert [item.id for item in submissions] == [submission.id]
 
                 teacher_lessons = await get_course_lessons(
                     db=db,
-                    course_id=course["id"],
+                    course_id=course.id,
                     user=teacher,
                 )
-                assert [item["id"] for item in teacher_lessons] == [
-                    hidden_lesson["id"],
-                    published_lesson["id"],
+                assert [item.id for item in teacher_lessons] == [
+                    hidden_lesson.id,
+                    published_lesson.id,
                 ]
         finally:
             await engine.dispose()
@@ -264,9 +273,9 @@ def test_course_listing_is_scoped_to_enrollment(tmp_path):
                 outsider_courses = await get_all_courses(db=db, user=outsider)
                 teacher_courses = await get_all_courses(db=db, user=teacher)
 
-                assert [item["id"] for item in student_courses] == [course["id"]]
+                assert [item.id for item in student_courses] == [course.id]
                 assert outsider_courses == []
-                assert [item["id"] for item in teacher_courses] == [course["id"]]
+                assert [item.id for item in teacher_courses] == [course.id]
         finally:
             await engine.dispose()
 

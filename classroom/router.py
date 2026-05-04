@@ -1,6 +1,4 @@
 from fastapi import APIRouter
-from fastapi.params import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from classroom.crud import (
     create_announcement,
@@ -54,9 +52,7 @@ from classroom.schemas import (
     UploadedFileSchemaCreate,
     UploadedFileSchemaRead,
 )
-from database.engine import get_async_session
-from database.models import User
-from settings import current_user
+from classroom.dependencies import CurrentUser, DbSession
 
 router = APIRouter()
 
@@ -68,8 +64,8 @@ def get():
 
 @router.get("/courses/", response_model=list[CourseSchemaRead])
 async def read_courses(
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await get_all_courses(db=db, user=user)
 
@@ -77,8 +73,8 @@ async def read_courses(
 @router.post("/courses/", response_model=CourseSchemaRead)
 async def create_course_post(
     course_data: CourseSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await create_course(db=db, course_data=course_data, user=user)
 
@@ -86,8 +82,8 @@ async def create_course_post(
 @router.get("/courses/{course_id}/", response_model=CourseSchemaRead)
 async def read_course(
     course_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await get_course(db=db, course_id=course_id, user=user)
 
@@ -96,8 +92,8 @@ async def read_course(
 async def update_course_patch(
     course_id: int,
     course_data: CourseSchemaUpdate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await update_course(
         db=db,
@@ -110,8 +106,8 @@ async def update_course_patch(
 @router.delete("/courses/{course_id}/")
 async def delete_course_delete(
     course_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await delete_course(db=db, course_id=course_id, user=user)
 
@@ -122,8 +118,8 @@ async def delete_course_delete(
 )
 async def read_course_enrollments(
     course_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await get_course_enrollments(db=db, course_id=course_id, user=user)
 
@@ -132,8 +128,8 @@ async def read_course_enrollments(
 async def enroll_user_post(
     course_id: int,
     enrollment_data: EnrollmentSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await enroll_user(
         db=db,
@@ -147,8 +143,8 @@ async def enroll_user_post(
 async def update_enrollment_patch(
     enrollment_id: int,
     enrollment_data: EnrollmentSchemaUpdate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await update_enrollment(
         db=db,
@@ -161,8 +157,8 @@ async def update_enrollment_patch(
 @router.get("/courses/{course_id}/lessons/", response_model=list[LessonSchemaRead])
 async def read_course_lessons(
     course_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await get_course_lessons(db=db, course_id=course_id, user=user)
 
@@ -171,8 +167,8 @@ async def read_course_lessons(
 async def create_lesson_post(
     course_id: int,
     lesson_data: LessonSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await create_lesson(
         db=db,
@@ -185,8 +181,8 @@ async def create_lesson_post(
 @router.get("/lessons/{lesson_id}/", response_model=LessonSchemaRead)
 async def read_lesson(
     lesson_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await get_lesson(db=db, lesson_id=lesson_id, user=user)
 
@@ -195,8 +191,8 @@ async def read_lesson(
 async def update_lesson_patch(
     lesson_id: int,
     lesson_data: LessonSchemaUpdate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await update_lesson(
         db=db,
@@ -209,8 +205,8 @@ async def update_lesson_patch(
 @router.delete("/lessons/{lesson_id}/")
 async def delete_lesson_delete(
     lesson_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await delete_lesson(db=db, lesson_id=lesson_id, user=user)
 
@@ -218,8 +214,8 @@ async def delete_lesson_delete(
 @router.get("/lessons/{lesson_id}/materials/", response_model=list[MaterialSchemaRead])
 async def read_lesson_materials(
     lesson_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await get_lesson_materials(db=db, lesson_id=lesson_id, user=user)
 
@@ -227,8 +223,8 @@ async def read_lesson_materials(
 @router.post("/materials/", response_model=MaterialSchemaRead)
 async def create_material_post(
     material_data: MaterialSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await create_material(
         db=db,
@@ -244,8 +240,8 @@ async def create_material_post(
 )
 async def read_lesson_assignments(
     lesson_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await get_lesson_assignments(db=db, lesson_id=lesson_id, user=user)
 
@@ -254,8 +250,8 @@ async def read_lesson_assignments(
 async def create_assignment_post(
     lesson_id: int,
     assignment_data: AssignmentSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await create_assignment(
         db=db,
@@ -269,8 +265,8 @@ async def create_assignment_post(
 async def update_assignment_patch(
     assignment_id: int,
     assignment_data: AssignmentSchemaUpdate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await update_assignment(
         db=db,
@@ -283,8 +279,8 @@ async def update_assignment_patch(
 @router.delete("/assignments/{assignment_id}/")
 async def delete_assignment_delete(
     assignment_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await delete_assignment(db=db, assignment_id=assignment_id, user=user)
 
@@ -296,8 +292,8 @@ async def delete_assignment_delete(
 async def create_submission_post(
     assignment_id: int,
     submission_data: SubmissionSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await create_submission(
         db=db,
@@ -311,8 +307,8 @@ async def create_submission_post(
 async def update_submission_patch(
     submission_id: int,
     submission_data: SubmissionSchemaUpdate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await update_submission(
         db=db,
@@ -328,8 +324,8 @@ async def update_submission_patch(
 )
 async def read_assignment_submissions(
     assignment_id: int,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await get_assignment_submissions(
         db=db,
@@ -342,8 +338,8 @@ async def read_assignment_submissions(
 async def grade_submission_post(
     submission_id: int,
     grade_data: GradeSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await grade_submission(
         db=db,
@@ -356,8 +352,8 @@ async def grade_submission_post(
 @router.post("/files/", response_model=UploadedFileSchemaRead)
 async def create_uploaded_file_post(
     file_data: UploadedFileSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await create_uploaded_file(db=db, owner_id=user.id, file_data=file_data)
 
@@ -369,8 +365,8 @@ async def create_uploaded_file_post(
 async def create_announcement_post(
     course_id: int,
     announcement_data: AnnouncementSchemaCreate,
-    user: User = Depends(current_user),
-    db: AsyncSession = Depends(get_async_session),
+    user: CurrentUser,
+    db: DbSession,
 ):
     return await create_announcement(
         db=db,
