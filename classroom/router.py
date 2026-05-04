@@ -52,7 +52,7 @@ from classroom.schemas import (
     UploadedFileSchemaCreate,
     UploadedFileSchemaRead,
 )
-from classroom.dependencies import CurrentUser, DbSession
+from dependencies import CurrentUser, DbSession
 
 router = APIRouter()
 

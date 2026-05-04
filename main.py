@@ -6,6 +6,7 @@ from user.auth import auth_backend
 from database.models import User
 from user.schemas import UserRead, UserCreate
 from classroom.router import router as classroom_router
+from user.router import router as user_router
 
 app = FastAPI()
 
@@ -28,6 +29,7 @@ app.include_router(
 )
 
 app.include_router(classroom_router, prefix="/classroom", tags=["classroom"])
+app.include_router(user_router, prefix="/users", tags=["users"])
 
 
 @app.get("/protected-route")
