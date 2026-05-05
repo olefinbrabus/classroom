@@ -138,6 +138,18 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
                 ]
 
                 with pytest.raises(HTTPException) as exc_info:
+                    await enroll_user(
+                        db=db,
+                        course_id=course.id,
+                        enrollment_data=EnrollmentSchemaCreate(
+                            user_id=student.id,
+                            role=EnrollmentRole.STUDENT,
+                        ),
+                        user=teacher,
+                    )
+                assert exc_info.value.status_code == 409
+
+                with pytest.raises(HTTPException) as exc_info:
                     await get_course_lessons(
                         db=db,
                         course_id=course.id,
@@ -203,6 +215,15 @@ def test_lms_flow_enforces_roles_and_published_content(tmp_path):
                     submission_data=SubmissionSchemaCreate(text="Done"),
                 )
                 assert submission.status == SubmissionStatus.SUBMITTED
+
+                with pytest.raises(HTTPException) as exc_info:
+                    await create_submission(
+                        db=db,
+                        assignment_id=published_assignment.id,
+                        student_id=student.id,
+                        submission_data=SubmissionSchemaCreate(text="Duplicate"),
+                    )
+                assert exc_info.value.status_code == 409
 
                 with pytest.raises(HTTPException) as exc_info:
                     await grade_submission(

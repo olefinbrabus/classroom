@@ -6,8 +6,10 @@ from sqlalchemy.orm import selectinload
 
 from classroom.repositories import (
     commit_or_rollback,
+    get_enrollment_by_course_user,
     get_grade_for_submission,
     get_or_404,
+    get_submission_by_assignment_student,
     list_all_courses,
     list_assignment_submissions,
     list_course_enrollments,
@@ -153,6 +155,16 @@ async def enroll_user(
     await require_course_teacher(db=db, course_id=course_id, user=user)
     course = await get_course_or_404(db=db, course_id=course_id)
     enrolled_user = await get_user_or_404(db=db, user_id=enrollment_data.user_id)
+    if await get_enrollment_by_course_user(
+        db=db,
+        course_id=course_id,
+        user_id=enrollment_data.user_id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User is already enrolled in this course",
+        )
+
     enrollment = Enrollment(
         course=course,
         user=enrolled_user,
@@ -349,6 +361,16 @@ async def create_submission(
     assignment = await get_assignment_or_404(db=db, assignment_id=assignment_id)
     require_assignment_published(assignment)
     await get_user_or_404(db=db, user_id=student_id)
+    if await get_submission_by_assignment_student(
+        db=db,
+        assignment_id=assignment_id,
+        student_id=student_id,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Submission already exists for this assignment",
+        )
+
     submission = Submission(
         assignment_id=assignment_id,
         student_id=student_id,

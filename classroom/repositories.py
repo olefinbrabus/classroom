@@ -53,6 +53,22 @@ async def list_course_enrollments(db: AsyncSession, course_id: int):
     return result.scalars().all()
 
 
+async def get_enrollment_by_course_user(
+    db: AsyncSession,
+    course_id: int,
+    user_id: int,
+) -> Enrollment | None:
+    result = await db.execute(
+        select(Enrollment)
+        .where(
+            Enrollment.course_id == course_id,
+            Enrollment.user_id == user_id,
+        )
+        .options(selectinload(Enrollment.user))
+    )
+    return result.scalar_one_or_none()
+
+
 async def list_course_lessons(
     db: AsyncSession,
     course_id: int,
@@ -93,6 +109,20 @@ async def list_assignment_submissions(db: AsyncSession, assignment_id: int):
         .order_by(Submission.id)
     )
     return result.scalars().all()
+
+
+async def get_submission_by_assignment_student(
+    db: AsyncSession,
+    assignment_id: int,
+    student_id: int,
+) -> Submission | None:
+    result = await db.execute(
+        select(Submission).where(
+            Submission.assignment_id == assignment_id,
+            Submission.student_id == student_id,
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_grade_for_submission(

@@ -1,11 +1,476 @@
-# Test your FastAPI endpoints
+# Classroom LMS manual HTTP checks.
+# Run the app first:
+#   PYTHONPATH=. .venv/bin/uvicorn main:app --reload
+#
+# Adjust credentials and existing ids to match your current classroom_database.db.
+# JetBrains HTTP Client keeps cookies per host, so login as one actor, run that
+# actor's requests, then logout before switching to another actor.
 
-GET http://127.0.0.1:8000/
+@host = http://127.0.0.1:8000
+
+@teacherEmail = admin@admin.com
+@teacherPassword = Administrate_12345
+
+@studentEmail = student@example.com
+@studentPassword = Student_12345
+
+@outsiderEmail = outsider@example.com
+@outsiderPassword = Outsider_12345
+
+@existingTeacherId = 1
+@existingStudentId = 2
+@existingOutsiderId = 3
+@existingCourseId = 1
+@existingEnrollmentId = 1
+@existingLessonId = 1
+@existingAssignmentId = 1
+@existingSubmissionId = 1
+
+### Root health check
+GET {{host}}/
 Accept: application/json
 
-###
-
-GET http://127.0.0.1:8000/hello/User
+### Classroom health check
+GET {{host}}/classroom/
 Accept: application/json
 
-###
+### Unauthorized user endpoint should be 401
+GET {{host}}/users/me/
+Accept: application/json
+
+### Unauthorized classroom courses should be 401
+GET {{host}}/classroom/courses/
+Accept: application/json
+
+### Register student if it does not exist yet
+POST {{host}}/register/register
+Content-Type: application/json
+
+{
+  "email": "{{studentEmail}}",
+  "password": "{{studentPassword}}",
+  "first_name": "Student",
+  "second_name": "Manual",
+  "third_name": "Check"
+}
+
+### Register outsider if it does not exist yet
+POST {{host}}/register/register
+Content-Type: application/json
+
+{
+  "email": "{{outsiderEmail}}",
+  "password": "{{outsiderPassword}}",
+  "first_name": "Outsider",
+  "second_name": "Manual",
+  "third_name": "Check"
+}
+
+### Login as teacher
+POST {{host}}/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username={{teacherEmail}}&password={{teacherPassword}}
+
+### Teacher: current profile
+GET {{host}}/users/me/
+Accept: application/json
+
+### Teacher: protected route
+GET {{host}}/protected-route
+Accept: application/json
+
+### Teacher: list all visible users
+GET {{host}}/users/?limit=100&offset=0
+Accept: application/json
+
+### Teacher: search users
+GET {{host}}/users/?search=student&limit=20&offset=0
+Accept: application/json
+
+### Teacher: read existing student by id
+GET {{host}}/users/{{existingStudentId}}/
+Accept: application/json
+
+### Teacher: read existing student LMS summary
+GET {{host}}/users/{{existingStudentId}}/lms/
+Accept: application/json
+
+### Teacher: list courses
+GET {{host}}/classroom/courses/
+Accept: application/json
+
+### Teacher: create course
+POST {{host}}/classroom/courses/
+Content-Type: application/json
+
+{
+  "title": "Manual HTTP LMS Course",
+  "description": "Course created from test_main.http",
+  "is_active": true
+}
+
+### Teacher: read existing course
+GET {{host}}/classroom/courses/{{existingCourseId}}/
+Accept: application/json
+
+### Teacher: update existing course
+PATCH {{host}}/classroom/courses/{{existingCourseId}}/
+Content-Type: application/json
+
+{
+  "description": "Updated from test_main.http",
+  "is_active": true
+}
+
+### Teacher: enroll existing student into existing course
+POST {{host}}/classroom/courses/{{existingCourseId}}/enrollments/
+Content-Type: application/json
+
+{
+  "user_id": {{existingStudentId}},
+  "role": "student",
+  "status": "active"
+}
+
+### Teacher: duplicate enrollment should be 409 if the student is already enrolled
+POST {{host}}/classroom/courses/{{existingCourseId}}/enrollments/
+Content-Type: application/json
+
+{
+  "user_id": {{existingStudentId}},
+  "role": "student",
+  "status": "active"
+}
+
+### Teacher: list course enrollments
+GET {{host}}/classroom/courses/{{existingCourseId}}/enrollments/
+Accept: application/json
+
+### Teacher: update existing enrollment
+PATCH {{host}}/classroom/enrollments/{{existingEnrollmentId}}/
+Content-Type: application/json
+
+{
+  "status": "active"
+}
+
+### Teacher: create draft lesson
+POST {{host}}/classroom/courses/{{existingCourseId}}/lessons/
+Content-Type: application/json
+
+{
+  "title": "Manual draft lesson",
+  "description": "Students should not see it until published",
+  "position": 0,
+  "is_published": false
+}
+
+### Teacher: create published lesson
+POST {{host}}/classroom/courses/{{existingCourseId}}/lessons/
+Content-Type: application/json
+
+{
+  "title": "Manual published lesson",
+  "description": "Students should see it",
+  "position": 1,
+  "is_published": true
+}
+
+### Teacher: list course lessons, should include draft and published lessons
+GET {{host}}/classroom/courses/{{existingCourseId}}/lessons/
+Accept: application/json
+
+### Teacher: read existing lesson
+GET {{host}}/classroom/lessons/{{existingLessonId}}/
+Accept: application/json
+
+### Teacher: update existing lesson
+PATCH {{host}}/classroom/lessons/{{existingLessonId}}/
+Content-Type: application/json
+
+{
+  "is_published": true,
+  "position": 1
+}
+
+### Teacher: create material for existing lesson
+POST {{host}}/classroom/materials/
+Content-Type: application/json
+
+{
+  "title": "Manual material",
+  "description": "Created from HTTP file",
+  "material_type": "materials",
+  "lesson_id": {{existingLessonId}}
+}
+
+### Teacher: list lesson materials
+GET {{host}}/classroom/lessons/{{existingLessonId}}/materials/
+Accept: application/json
+
+### Teacher: create assignment for existing lesson
+POST {{host}}/classroom/lessons/{{existingLessonId}}/assignments/
+Content-Type: application/json
+
+{
+  "title": "Manual assignment",
+  "description": "Submit a short answer",
+  "max_score": 10,
+  "is_published": true
+}
+
+### Teacher: list lesson assignments
+GET {{host}}/classroom/lessons/{{existingLessonId}}/assignments/
+Accept: application/json
+
+### Teacher: update existing assignment
+PATCH {{host}}/classroom/assignments/{{existingAssignmentId}}/
+Content-Type: application/json
+
+{
+  "max_score": 10,
+  "is_published": true
+}
+
+### Teacher: list assignment submissions
+GET {{host}}/classroom/assignments/{{existingAssignmentId}}/submissions/
+Accept: application/json
+
+### Teacher: grade existing submission
+POST {{host}}/classroom/submissions/{{existingSubmissionId}}/grade/
+Content-Type: application/json
+
+{
+  "score": 8,
+  "feedback": "Checked from test_main.http"
+}
+
+### Teacher: grade validation should be 422 when score is negative
+POST {{host}}/classroom/submissions/{{existingSubmissionId}}/grade/
+Content-Type: application/json
+
+{
+  "score": -1,
+  "feedback": "Invalid score"
+}
+
+### Teacher: create uploaded file metadata
+POST {{host}}/classroom/files/
+Content-Type: application/json
+
+{
+  "filename": "manual-check.txt",
+  "content_type": "text/plain",
+  "size": 128,
+  "storage_path": "uploads/manual-check.txt"
+}
+
+### Teacher: create announcement
+POST {{host}}/classroom/courses/{{existingCourseId}}/announcements/
+Content-Type: application/json
+
+{
+  "title": "Manual announcement",
+  "message": "Announcement created from test_main.http"
+}
+
+### Teacher: read student in course
+GET {{host}}/users/{{existingStudentId}}/courses/{{existingCourseId}}/
+Accept: application/json
+
+### Teacher: read student progress in course
+GET {{host}}/users/{{existingStudentId}}/courses/{{existingCourseId}}/progress/
+Accept: application/json
+
+### Teacher: outsider progress should be 403 if outsider is not a student in course
+GET {{host}}/users/{{existingOutsiderId}}/courses/{{existingCourseId}}/progress/
+Accept: application/json
+
+### Logout teacher before switching users
+POST {{host}}/auth/logout
+
+### Login as student
+POST {{host}}/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username={{studentEmail}}&password={{studentPassword}}
+
+### Student: current profile
+GET {{host}}/users/me/
+Accept: application/json
+
+### Student: update own profile
+PATCH {{host}}/users/me/
+Content-Type: application/json
+
+{
+  "first_name": "Student"
+}
+
+### Student: own LMS summary
+GET {{host}}/users/me/lms/
+Accept: application/json
+
+### Student: list own courses only
+GET {{host}}/classroom/courses/
+Accept: application/json
+
+### Student: read existing course if enrolled
+GET {{host}}/classroom/courses/{{existingCourseId}}/
+Accept: application/json
+
+### Student: list course lessons, should not include unpublished draft lessons
+GET {{host}}/classroom/courses/{{existingCourseId}}/lessons/
+Accept: application/json
+
+### Student: list lesson assignments, should not include unpublished assignments
+GET {{host}}/classroom/lessons/{{existingLessonId}}/assignments/
+Accept: application/json
+
+### Student: create submission for published assignment
+POST {{host}}/classroom/assignments/{{existingAssignmentId}}/submissions/
+Content-Type: application/json
+
+{
+  "text": "Student answer from test_main.http",
+  "status": "submitted"
+}
+
+### Student: duplicate submission should be 409 if this assignment already has student's submission
+POST {{host}}/classroom/assignments/{{existingAssignmentId}}/submissions/
+Content-Type: application/json
+
+{
+  "text": "Duplicate student answer from test_main.http",
+  "status": "submitted"
+}
+
+### Student: update existing own submission before grade, if it belongs to current student
+PATCH {{host}}/classroom/submissions/{{existingSubmissionId}}/
+Content-Type: application/json
+
+{
+  "text": "Updated student answer from test_main.http"
+}
+
+### Student: creating course should be 403
+POST {{host}}/classroom/courses/
+Content-Type: application/json
+
+{
+  "title": "Student forbidden course"
+}
+
+### Student: creating lesson should be 403
+POST {{host}}/classroom/courses/{{existingCourseId}}/lessons/
+Content-Type: application/json
+
+{
+  "title": "Student forbidden lesson"
+}
+
+### Student: listing all users should be 403
+GET {{host}}/users/
+Accept: application/json
+
+### Student: reading another user's LMS summary should be 403
+GET {{host}}/users/{{existingTeacherId}}/lms/
+Accept: application/json
+
+### Student: grading submission should be 403
+POST {{host}}/classroom/submissions/{{existingSubmissionId}}/grade/
+Content-Type: application/json
+
+{
+  "score": 9
+}
+
+### Logout student before switching users
+POST {{host}}/auth/logout
+
+### Login as outsider
+POST {{host}}/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username={{outsiderEmail}}&password={{outsiderPassword}}
+
+### Outsider: current profile
+GET {{host}}/users/me/
+Accept: application/json
+
+### Outsider: list courses, should be empty unless enrolled somewhere
+GET {{host}}/classroom/courses/
+Accept: application/json
+
+### Outsider: read protected course should be 403 if not enrolled
+GET {{host}}/classroom/courses/{{existingCourseId}}/
+Accept: application/json
+
+### Outsider: read course lessons should be 403 if not enrolled
+GET {{host}}/classroom/courses/{{existingCourseId}}/lessons/
+Accept: application/json
+
+### Outsider: submit assignment should be 403 if not enrolled as student
+POST {{host}}/classroom/assignments/{{existingAssignmentId}}/submissions/
+Content-Type: application/json
+
+{
+  "text": "Outsider forbidden answer"
+}
+
+### Outsider: read student LMS summary should be 403
+GET {{host}}/users/{{existingStudentId}}/lms/
+Accept: application/json
+
+### Outsider: list users should be 403
+GET {{host}}/users/
+Accept: application/json
+
+### Logout outsider
+POST {{host}}/auth/logout
+
+### Login as teacher for validation checks
+POST {{host}}/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username={{teacherEmail}}&password={{teacherPassword}}
+
+### Invalid course payload should be 422
+POST {{host}}/classroom/courses/
+Content-Type: application/json
+
+{
+  "title": ""
+}
+
+### Invalid lesson payload should be 422
+POST {{host}}/classroom/courses/{{existingCourseId}}/lessons/
+Content-Type: application/json
+
+{
+  "title": "Invalid lesson",
+  "position": -1
+}
+
+### Invalid assignment payload should be 422
+POST {{host}}/classroom/lessons/{{existingLessonId}}/assignments/
+Content-Type: application/json
+
+{
+  "title": "Invalid assignment",
+  "max_score": 0
+}
+
+### Invalid file metadata should be 422
+POST {{host}}/classroom/files/
+Content-Type: application/json
+
+{
+  "filename": "",
+  "size": -1,
+  "storage_path": ""
+}
+
+### Logout teacher after validation checks
+POST {{host}}/auth/logout

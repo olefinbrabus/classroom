@@ -122,6 +122,15 @@ def test_http_lms_cycle_creates_submits_grades_and_reads_user_summary(tmp_path):
                     },
                 )
             )
+            duplicate_enrollment_response = client.post(
+                f"/classroom/courses/{course['id']}/enrollments/",
+                json={
+                    "user_id": student.id,
+                    "role": "student",
+                    "status": "active",
+                },
+            )
+            assert duplicate_enrollment_response.status_code == 409
 
             assert_ok_json(
                 client.post(
@@ -168,6 +177,11 @@ def test_http_lms_cycle_creates_submits_grades_and_reads_user_summary(tmp_path):
                 )
             )
             assert submission["student_id"] == student.id
+            duplicate_submission_response = client.post(
+                f"/classroom/assignments/{assignment['id']}/submissions/",
+                json={"text": "Duplicate"},
+            )
+            assert duplicate_submission_response.status_code == 409
 
         with authenticated_client(teacher, async_session_maker) as client:
             submissions_response = client.get(
@@ -270,4 +284,36 @@ def test_http_lms_rejects_unauthorized_and_forbidden_actions(tmp_path):
             )
             assert progress_response.status_code == 403
     finally:
+        run_async(engine.dispose())
+
+
+def test_http_register_creates_regular_student_user(tmp_path):
+    engine, async_session_maker = run_async(make_session_maker(tmp_path))
+
+    async def override_db_session():
+        async with async_session_maker() as db:
+            yield db
+
+    app.dependency_overrides[get_async_session] = override_db_session
+
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/register/register",
+                json={
+                    "email": "student@example.com",
+                    "password": "Student_12345",
+                    "first_name": "Student",
+                    "second_name": "Manual",
+                    "third_name": "Check",
+                },
+            )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["email"] == "student@example.com"
+        assert body["is_superuser"] is False
+        assert body["is_teacher"] is False
+    finally:
+        app.dependency_overrides.clear()
         run_async(engine.dispose())

@@ -1,4 +1,5 @@
 from typing import AsyncGenerator
+from pathlib import Path
 
 from fastapi.params import Depends
 from fastapi_users_db_sqlalchemy import SQLAlchemyUserDatabase
@@ -12,7 +13,9 @@ from sqlalchemy.orm import (
     declarative_base,
 )
 
-DATABASE_CONNECTION_STRING = "sqlite+aiosqlite:///./classroom_database.db"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATABASE_PATH = PROJECT_ROOT / "classroom_database.db"
+DATABASE_CONNECTION_STRING = f"sqlite+aiosqlite:///{DATABASE_PATH}"
 
 engine: AsyncEngine = create_async_engine(DATABASE_CONNECTION_STRING)
 
