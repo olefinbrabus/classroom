@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 from classroom.crud import (
     create_announcement,
@@ -70,7 +70,11 @@ async def read_courses(
     return await get_all_courses(db=db, user=user)
 
 
-@router.post("/courses/", response_model=CourseSchemaRead)
+@router.post(
+    "/courses/",
+    response_model=CourseSchemaRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_course_post(
     course_data: CourseSchemaCreate,
     user: CurrentUser,
@@ -103,7 +107,10 @@ async def update_course_patch(
     )
 
 
-@router.delete("/courses/{course_id}/")
+@router.delete(
+    "/courses/{course_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def delete_course_delete(
     course_id: int,
     user: CurrentUser,
@@ -124,7 +131,11 @@ async def read_course_enrollments(
     return await get_course_enrollments(db=db, course_id=course_id, user=user)
 
 
-@router.post("/courses/{course_id}/enrollments/", response_model=EnrollmentSchemaRead)
+@router.post(
+    "/courses/{course_id}/enrollments/",
+    response_model=EnrollmentSchemaRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def enroll_user_post(
     course_id: int,
     enrollment_data: EnrollmentSchemaCreate,
@@ -163,7 +174,11 @@ async def read_course_lessons(
     return await get_course_lessons(db=db, course_id=course_id, user=user)
 
 
-@router.post("/courses/{course_id}/lessons/", response_model=LessonSchemaRead)
+@router.post(
+    "/courses/{course_id}/lessons/",
+    response_model=LessonSchemaRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_lesson_post(
     course_id: int,
     lesson_data: LessonSchemaCreate,
@@ -202,7 +217,10 @@ async def update_lesson_patch(
     )
 
 
-@router.delete("/lessons/{lesson_id}/")
+@router.delete(
+    "/lessons/{lesson_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def delete_lesson_delete(
     lesson_id: int,
     user: CurrentUser,
@@ -220,7 +238,11 @@ async def read_lesson_materials(
     return await get_lesson_materials(db=db, lesson_id=lesson_id, user=user)
 
 
-@router.post("/materials/", response_model=MaterialSchemaRead)
+@router.post(
+    "/materials/",
+    response_model=MaterialSchemaRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_material_post(
     material_data: MaterialSchemaCreate,
     user: CurrentUser,
@@ -246,7 +268,11 @@ async def read_lesson_assignments(
     return await get_lesson_assignments(db=db, lesson_id=lesson_id, user=user)
 
 
-@router.post("/lessons/{lesson_id}/assignments/", response_model=AssignmentSchemaRead)
+@router.post(
+    "/lessons/{lesson_id}/assignments/",
+    response_model=AssignmentSchemaRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_assignment_post(
     lesson_id: int,
     assignment_data: AssignmentSchemaCreate,
@@ -276,7 +302,10 @@ async def update_assignment_patch(
     )
 
 
-@router.delete("/assignments/{assignment_id}/")
+@router.delete(
+    "/assignments/{assignment_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
 async def delete_assignment_delete(
     assignment_id: int,
     user: CurrentUser,
@@ -288,6 +317,7 @@ async def delete_assignment_delete(
 @router.post(
     "/assignments/{assignment_id}/submissions/",
     response_model=SubmissionSchemaRead,
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_submission_post(
     assignment_id: int,
@@ -349,7 +379,11 @@ async def grade_submission_post(
     )
 
 
-@router.post("/files/", response_model=UploadedFileSchemaRead)
+@router.post(
+    "/files/",
+    response_model=UploadedFileSchemaRead,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_uploaded_file_post(
     file_data: UploadedFileSchemaCreate,
     user: CurrentUser,
@@ -361,6 +395,7 @@ async def create_uploaded_file_post(
 @router.post(
     "/courses/{course_id}/announcements/",
     response_model=AnnouncementSchemaRead,
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_announcement_post(
     course_id: int,

@@ -20,6 +20,11 @@ def assert_ok_json(response):
     return response.json()
 
 
+def assert_created_json(response):
+    assert response.status_code == 201
+    return response.json()
+
+
 async def make_session_maker(tmp_path):
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path}/http.db")
 
@@ -105,14 +110,14 @@ def test_http_lms_cycle_creates_submits_grades_and_reads_user_summary(tmp_path):
 
     try:
         with authenticated_client(teacher, async_session_maker) as client:
-            course = assert_ok_json(
+            course = assert_created_json(
                 client.post(
                     "/classroom/courses/",
                     json={"title": "Python LMS", "description": "HTTP flow"},
                 )
             )
 
-            assert_ok_json(
+            assert_created_json(
                 client.post(
                     f"/classroom/courses/{course['id']}/enrollments/",
                     json={
@@ -132,14 +137,14 @@ def test_http_lms_cycle_creates_submits_grades_and_reads_user_summary(tmp_path):
             )
             assert duplicate_enrollment_response.status_code == 409
 
-            assert_ok_json(
+            assert_created_json(
                 client.post(
                     f"/classroom/courses/{course['id']}/lessons/",
                     json={"title": "Draft lesson", "position": 0},
                 )
             )
 
-            published_lesson = assert_ok_json(
+            published_lesson = assert_created_json(
                 client.post(
                     f"/classroom/courses/{course['id']}/lessons/",
                     json={
@@ -150,7 +155,7 @@ def test_http_lms_cycle_creates_submits_grades_and_reads_user_summary(tmp_path):
                 )
             )
 
-            assignment = assert_ok_json(
+            assignment = assert_created_json(
                 client.post(
                     f"/classroom/lessons/{published_lesson['id']}/assignments/",
                     json={
@@ -170,7 +175,7 @@ def test_http_lms_cycle_creates_submits_grades_and_reads_user_summary(tmp_path):
                 "Published lesson"
             ]
 
-            submission = assert_ok_json(
+            submission = assert_created_json(
                 client.post(
                     f"/classroom/assignments/{assignment['id']}/submissions/",
                     json={"text": "Done"},
@@ -220,13 +225,13 @@ def test_http_lms_rejects_unauthorized_and_forbidden_actions(tmp_path):
             assert client.get("/classroom/courses/").status_code == 401
 
         with authenticated_client(teacher, async_session_maker) as client:
-            course = assert_ok_json(
+            course = assert_created_json(
                 client.post(
                     "/classroom/courses/",
                     json={"title": "Permissions"},
                 )
             )
-            assert_ok_json(
+            assert_created_json(
                 client.post(
                     f"/classroom/courses/{course['id']}/enrollments/",
                     json={
@@ -236,13 +241,13 @@ def test_http_lms_rejects_unauthorized_and_forbidden_actions(tmp_path):
                     },
                 )
             )
-            lesson = assert_ok_json(
+            lesson = assert_created_json(
                 client.post(
                     f"/classroom/courses/{course['id']}/lessons/",
                     json={"title": "Access", "is_published": True},
                 )
             )
-            assignment = assert_ok_json(
+            assignment = assert_created_json(
                 client.post(
                     f"/classroom/lessons/{lesson['id']}/assignments/",
                     json={"title": "Forbidden actions", "is_published": True},
@@ -256,7 +261,7 @@ def test_http_lms_rejects_unauthorized_and_forbidden_actions(tmp_path):
             )
             assert create_lesson_response.status_code == 403
 
-            submission = assert_ok_json(
+            submission = assert_created_json(
                 client.post(
                     f"/classroom/assignments/{assignment['id']}/submissions/",
                     json={"text": "Student answer"},

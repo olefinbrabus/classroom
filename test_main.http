@@ -1,8 +1,11 @@
 # Classroom LMS manual HTTP checks.
-# Run the app first:
+# Reset and seed the local dev database first:
+#   PYTHONPATH=. .venv/bin/python -m scripts.dev_seed --reset
+#
+# Then run the app:
 #   PYTHONPATH=. .venv/bin/uvicorn main:app --reload
 #
-# Adjust credentials and existing ids to match your current classroom_database.db.
+# The variables below match scripts.dev_seed stable credentials and ids.
 # JetBrains HTTP Client keeps cookies per host, so login as one actor, run that
 # actor's requests, then logout before switching to another actor.
 
@@ -42,7 +45,7 @@ Accept: application/json
 GET {{host}}/classroom/courses/
 Accept: application/json
 
-### Register student if it does not exist yet
+### Optional: register student, should be 400 after dev seed because user exists
 POST {{host}}/register/register
 Content-Type: application/json
 
@@ -54,7 +57,7 @@ Content-Type: application/json
   "third_name": "Check"
 }
 
-### Register outsider if it does not exist yet
+### Optional: register outsider, should be 400 after dev seed because user exists
 POST {{host}}/register/register
 Content-Type: application/json
 
@@ -100,7 +103,7 @@ Accept: application/json
 GET {{host}}/classroom/courses/
 Accept: application/json
 
-### Teacher: create course
+### Teacher: create course, should be 201
 POST {{host}}/classroom/courses/
 Content-Type: application/json
 
@@ -123,7 +126,7 @@ Content-Type: application/json
   "is_active": true
 }
 
-### Teacher: enroll existing student into existing course
+### Teacher: enroll existing student into existing course, should be 409 after dev seed
 POST {{host}}/classroom/courses/{{existingCourseId}}/enrollments/
 Content-Type: application/json
 
@@ -155,7 +158,7 @@ Content-Type: application/json
   "status": "active"
 }
 
-### Teacher: create draft lesson
+### Teacher: create draft lesson, should be 201
 POST {{host}}/classroom/courses/{{existingCourseId}}/lessons/
 Content-Type: application/json
 
@@ -166,7 +169,7 @@ Content-Type: application/json
   "is_published": false
 }
 
-### Teacher: create published lesson
+### Teacher: create published lesson, should be 201
 POST {{host}}/classroom/courses/{{existingCourseId}}/lessons/
 Content-Type: application/json
 
@@ -194,7 +197,7 @@ Content-Type: application/json
   "position": 1
 }
 
-### Teacher: create material for existing lesson
+### Teacher: create material for existing lesson, should be 201
 POST {{host}}/classroom/materials/
 Content-Type: application/json
 
@@ -209,7 +212,7 @@ Content-Type: application/json
 GET {{host}}/classroom/lessons/{{existingLessonId}}/materials/
 Accept: application/json
 
-### Teacher: create assignment for existing lesson
+### Teacher: create assignment for existing lesson, should be 201
 POST {{host}}/classroom/lessons/{{existingLessonId}}/assignments/
 Content-Type: application/json
 
@@ -255,7 +258,7 @@ Content-Type: application/json
   "feedback": "Invalid score"
 }
 
-### Teacher: create uploaded file metadata
+### Teacher: create uploaded file metadata, should be 201
 POST {{host}}/classroom/files/
 Content-Type: application/json
 
@@ -266,7 +269,7 @@ Content-Type: application/json
   "storage_path": "uploads/manual-check.txt"
 }
 
-### Teacher: create announcement
+### Teacher: create announcement, should be 201
 POST {{host}}/classroom/courses/{{existingCourseId}}/announcements/
 Content-Type: application/json
 
@@ -328,7 +331,7 @@ Accept: application/json
 GET {{host}}/classroom/lessons/{{existingLessonId}}/assignments/
 Accept: application/json
 
-### Student: create submission for published assignment
+### Student: create submission for published assignment, should be 409 after dev seed
 POST {{host}}/classroom/assignments/{{existingAssignmentId}}/submissions/
 Content-Type: application/json
 

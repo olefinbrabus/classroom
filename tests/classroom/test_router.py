@@ -59,7 +59,7 @@ def test_create_course_creates_course(client, db_session, monkeypatch):
 
     response = client.post("/classroom/courses/", json=payload)
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json() == expected_course
     create_course_mock.assert_awaited_once()
 
@@ -84,7 +84,7 @@ def test_create_lesson_creates_lesson(client, db_session, monkeypatch):
 
     response = client.post("/classroom/courses/10/lessons/", json=payload)
 
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert response.json() == expected_lesson
     create_lesson_mock.assert_awaited_once()
 
