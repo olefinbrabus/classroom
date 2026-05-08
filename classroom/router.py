@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, File, UploadFile, status
 
 from classroom.crud import (
     create_announcement,
@@ -27,6 +27,7 @@ from classroom.crud import (
     update_lesson,
     update_submission,
 )
+from classroom.file_storage import save_upload_file
 from classroom.schemas import (
     AnnouncementSchemaCreate,
     AnnouncementSchemaRead,
@@ -389,6 +390,26 @@ async def create_uploaded_file_post(
     user: CurrentUser,
     db: DbSession,
 ):
+    return await create_uploaded_file(db=db, owner_id=user.id, file_data=file_data)
+
+
+@router.post(
+    "/files/upload/",
+    response_model=UploadedFileSchemaRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_file_post(
+    user: CurrentUser,
+    db: DbSession,
+    file: UploadFile = File(...),
+):
+    storage_path, size = await save_upload_file(file=file, owner_id=user.id)
+    file_data = UploadedFileSchemaCreate(
+        filename=file.filename or "upload.bin",
+        content_type=file.content_type,
+        size=size,
+        storage_path=storage_path,
+    )
     return await create_uploaded_file(db=db, owner_id=user.id, file_data=file_data)
 
 

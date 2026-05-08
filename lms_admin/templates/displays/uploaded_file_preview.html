@@ -1,0 +1,20 @@
+{% if data %}
+    {% if data.is_image %}
+        <a href="{{ data.url }}" target="_blank" rel="noopener noreferrer">
+            <img
+                    style="width: 8rem; max-height: 8rem; object-fit: contain"
+                    src="{{ data.url }}"
+                    class="img-fluid rounded border bg-white"
+                    alt="{{ data.filename }}"
+            />
+        </a>
+    {% elif data.is_text %}
+        <a class="badge bg-blue-lt" href="{{ data.url }}" target="_blank" rel="noopener noreferrer">
+            <i class="fas fa-fw fa-file-lines"></i> View text
+        </a>
+    {% else %}
+        <a class="badge bg-secondary-lt" href="{{ data.url }}" target="_blank" rel="noopener noreferrer">
+            <i class="fas fa-fw {{ data.content_type | file_icon }}"></i> Open file
+        </a>
+    {% endif %}
+{% endif %}

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from settings import fastapi_users, current_user
 from user.auth import auth_backend
 from database.models import User
+from lms_admin import setup_admin
 from user.schemas import UserRead, UserCreate
 from classroom.router import router as classroom_router
 from user.router import router as user_router
@@ -30,6 +31,7 @@ app.include_router(
 
 app.include_router(classroom_router, prefix="/classroom", tags=["classroom"])
 app.include_router(user_router, prefix="/users", tags=["users"])
+setup_admin(app)
 
 
 @app.get("/protected-route")

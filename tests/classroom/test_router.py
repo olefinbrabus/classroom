@@ -158,6 +158,46 @@ def test_grade_submission_uses_current_user_as_grader(
     assert call_kwargs["grade_data"].model_dump() == payload
 
 
+def test_upload_file_saves_file_and_creates_metadata(
+    client,
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    create_uploaded_file_mock = AsyncMock(
+        return_value={
+            "id": 9,
+            "owner_id": 1,
+            "filename": "lesson.txt",
+            "content_type": "text/plain",
+            "size": 13,
+            "storage_path": "user-1/generated_lesson.txt",
+            "created_at": datetime(2026, 5, 1).isoformat(),
+        }
+    )
+    monkeypatch.setenv("CLASSROOM_UPLOAD_ROOT", str(tmp_path))
+    monkeypatch.setattr("classroom.router.create_uploaded_file", create_uploaded_file_mock)
+
+    response = client.post(
+        "/classroom/files/upload/",
+        files={"file": ("lesson.txt", b"Hello upload!", "text/plain")},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["filename"] == "lesson.txt"
+    create_uploaded_file_mock.assert_awaited_once()
+
+    call_kwargs = create_uploaded_file_mock.await_args.kwargs
+    saved_path = tmp_path / call_kwargs["file_data"].storage_path
+    assert call_kwargs["db"] is db_session
+    assert call_kwargs["owner_id"] == 1
+    assert call_kwargs["file_data"].filename == "lesson.txt"
+    assert call_kwargs["file_data"].content_type == "text/plain"
+    assert call_kwargs["file_data"].size == len(b"Hello upload!")
+    assert call_kwargs["file_data"].content is None
+    assert saved_path.read_bytes() == b"Hello upload!"
+
+
 @pytest.mark.parametrize(
     ("method", "url", "payload"),
     [

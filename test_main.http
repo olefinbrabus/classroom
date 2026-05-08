@@ -5,6 +5,9 @@
 # Then run the app:
 #   PYTHONPATH=. .venv/bin/uvicorn main:app --reload
 #
+# Starlette Admin is available at:
+#   http://127.0.0.1:8000/admin
+#
 # The variables below match scripts.dev_seed stable credentials and ids.
 # JetBrains HTTP Client keeps cookies per host, so login as one actor, run that
 # actor's requests, then logout before switching to another actor.
@@ -266,8 +269,20 @@ Content-Type: application/json
   "filename": "manual-check.txt",
   "content_type": "text/plain",
   "size": 128,
-  "storage_path": "uploads/manual-check.txt"
+  "storage_path": "manual-check.txt",
+  "content": "Manual text stored in the database for fallback preview"
 }
+
+### Teacher: upload real text file, should be 201
+POST {{host}}/classroom/files/upload/
+Content-Type: multipart/form-data; boundary=ClassroomBoundary
+
+--ClassroomBoundary
+Content-Disposition: form-data; name="file"; filename="manual-upload.txt"
+Content-Type: text/plain
+
+Manual text stored in uploads and referenced from the database.
+--ClassroomBoundary--
 
 ### Teacher: create announcement, should be 201
 POST {{host}}/classroom/courses/{{existingCourseId}}/announcements/

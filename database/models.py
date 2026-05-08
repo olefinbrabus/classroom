@@ -273,6 +273,7 @@ class UploadedFile(BaseModel):
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    content: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

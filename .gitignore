@@ -10,6 +10,7 @@
 .pytest_cache/
 /database-data/
 /redis-data/
+uploads/
 classroom_database.db
 .DS_Store
 .AppleDouble

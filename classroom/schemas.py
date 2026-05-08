@@ -164,10 +164,16 @@ class UploadedFileSchemaCreate(PydanticBaseModel):
     content_type: str | None = None
     size: int = Field(default=0, ge=0)
     storage_path: str = Field(min_length=1, max_length=1024)
+    content: str | None = None
+    content_base64: str | None = None
 
 
-class UploadedFileSchemaRead(IdConfigModelSchema, UploadedFileSchemaCreate):
+class UploadedFileSchemaRead(IdConfigModelSchema):
     owner_id: int
+    filename: str
+    content_type: str | None = None
+    size: int
+    storage_path: str
     created_at: datetime
 
 

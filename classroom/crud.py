@@ -1,3 +1,5 @@
+import base64
+import binascii
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -449,11 +451,34 @@ async def create_uploaded_file(
     file_data: UploadedFileSchemaCreate,
 ):
     await get_user_or_404(db=db, user_id=owner_id)
-    uploaded_file = UploadedFile(owner_id=owner_id, **file_data.model_dump())
+    data = file_data.model_dump(exclude={"content", "content_base64"})
+    content = _decode_uploaded_file_content(file_data)
+    if content is not None and data["size"] == 0:
+        data["size"] = len(content)
+    uploaded_file = UploadedFile(owner_id=owner_id, content=content, **data)
     db.add(uploaded_file)
     await commit_or_rollback(db)
     await db.refresh(uploaded_file)
     return uploaded_file
+
+
+def _decode_uploaded_file_content(file_data: UploadedFileSchemaCreate) -> bytes | None:
+    if file_data.content is not None and file_data.content_base64 is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Use either content or content_base64, not both",
+        )
+    if file_data.content is not None:
+        return file_data.content.encode("utf-8")
+    if file_data.content_base64 is None:
+        return None
+    try:
+        return base64.b64decode(file_data.content_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="content_base64 must be valid base64",
+        ) from exc
 
 
 async def create_announcement(
