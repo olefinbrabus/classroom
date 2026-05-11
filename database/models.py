@@ -58,6 +58,14 @@ class User(SQLAlchemyBaseUserTable[int], BaseModel):
         foreign_keys="Announcement.author_id",
     )
 
+    def __admin_repr__(self, request):
+        full_name = " ".join(
+            part
+            for part in (self.second_name, self.first_name, self.third_name)
+            if part
+        )
+        return f"{full_name} <{self.email}>" if full_name else self.email
+
 
 class Course(BaseModel):
     __tablename__ = "course"
@@ -89,6 +97,9 @@ class Course(BaseModel):
         cascade="all, delete-orphan",
     )
 
+    def __admin_repr__(self, request):
+        return self.title
+
 
 class Enrollment(BaseModel):
     __tablename__ = "enrollment"
@@ -118,6 +129,11 @@ class Enrollment(BaseModel):
     course: Mapped[Course] = relationship(back_populates="enrollments")
     user: Mapped[User] = relationship(back_populates="enrollments")
 
+    def __admin_repr__(self, request):
+        user = self.user.email if self.user else self.user_id
+        course = self.course.title if self.course else self.course_id
+        return f"{user} in {course} ({self.role})"
+
 
 class Lesson(BaseModel):
     __tablename__ = "lesson"
@@ -140,6 +156,10 @@ class Lesson(BaseModel):
         cascade="all, delete-orphan",
     )
 
+    def __admin_repr__(self, request):
+        prefix = f"{self.position}. " if self.position is not None else ""
+        return f"{prefix}{self.title}"
+
 
 class Material(BaseModel):
     __tablename__ = "material"
@@ -160,6 +180,9 @@ class Material(BaseModel):
 
     user: Mapped[User] = relationship()
     lesson: Mapped[Lesson] = relationship(back_populates="materials")
+
+    def __admin_repr__(self, request):
+        return self.title or f"{self.material_type} material #{self.id}"
 
 
 class FileMaterial(BaseModel):
@@ -203,6 +226,9 @@ class Assignment(BaseModel):
         cascade="all, delete-orphan",
     )
 
+    def __admin_repr__(self, request):
+        return self.title
+
 
 class Submission(BaseModel):
     __tablename__ = "submission"
@@ -241,6 +267,11 @@ class Submission(BaseModel):
         cascade="all, delete-orphan",
     )
 
+    def __admin_repr__(self, request):
+        student = self.student.email if self.student else self.student_id
+        assignment = self.assignment.title if self.assignment else self.assignment_id
+        return f"{student} -> {assignment}"
+
 
 class Grade(BaseModel):
     __tablename__ = "grade"
@@ -261,6 +292,9 @@ class Grade(BaseModel):
     submission: Mapped[Submission] = relationship(back_populates="grade")
     grader: Mapped[User] = relationship(foreign_keys=[grader_id])
 
+    def __admin_repr__(self, request):
+        return f"{self.score} pts for submission #{self.submission_id}"
+
 
 class UploadedFile(BaseModel):
     __tablename__ = "uploaded_file"
@@ -279,6 +313,9 @@ class UploadedFile(BaseModel):
     )
 
     owner: Mapped[User] = relationship()
+
+    def __admin_repr__(self, request):
+        return self.filename
 
 
 class Announcement(BaseModel):
@@ -299,6 +336,9 @@ class Announcement(BaseModel):
         back_populates="authored_announcements",
         foreign_keys=[author_id],
     )
+
+    def __admin_repr__(self, request):
+        return self.title
 
 
 class HomeWork(BaseModel):

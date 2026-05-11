@@ -4,20 +4,41 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from starlette.middleware import Middleware
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import Response
 from starlette_admin.contrib.sqla import Admin
-from starlette_admin.exceptions import LoginFailed
+from starlette_admin.exceptions import FormValidationError, LoginFailed
 
 from database.engine import BaseModel
-from database.models import UploadedFile, User
+from database.models import (
+    Announcement,
+    Assignment,
+    Enrollment,
+    Grade,
+    Lesson,
+    Material,
+    Submission,
+    UploadedFile,
+    User,
+)
 from lms_admin.auth import SuperuserAdminAuth
 from lms_admin.file_preview import add_uploaded_file_preview_route
 from lms_admin.setup import ADMIN_TEMPLATES_DIR
-from lms_admin.views import UploadedFileAdmin, UserAdmin
+from lms_admin.views import (
+    AnnouncementAdmin,
+    AssignmentAdmin,
+    EnrollmentAdmin,
+    GradeAdmin,
+    LessonAdmin,
+    MaterialAdmin,
+    SubmissionAdmin,
+    UploadedFileAdmin,
+    UserAdmin,
+)
 from main import app
 from user.auth import SECRET
 from user.manager import UserManager
@@ -176,6 +197,114 @@ def test_authenticated_admin_can_open_user_list(tmp_path):
     run_async(scenario())
 
 
+def test_admin_create_forms_include_required_relationship_fields():
+    expected_relationship_fields = [
+        (EnrollmentAdmin(Enrollment), {"course", "user"}),
+        (LessonAdmin(Lesson), {"course"}),
+        (MaterialAdmin(Material), {"user", "lesson"}),
+        (AssignmentAdmin(Assignment), {"lesson"}),
+        (SubmissionAdmin(Submission), {"assignment", "student"}),
+        (GradeAdmin(Grade), {"submission", "grader"}),
+        (UploadedFileAdmin(UploadedFile), {"owner"}),
+        (AnnouncementAdmin(Announcement), {"course", "author"}),
+    ]
+
+    for view, expected_names in expected_relationship_fields:
+        fields = {
+            field.name: type(field).__name__
+            for field in view.get_fields_list(None)
+        }
+
+        assert expected_names <= fields.keys()
+        assert all(fields[name] == "HasOne" for name in expected_names)
+
+
+def test_admin_validate_rejects_missing_required_relationships():
+    async def scenario():
+        view = MaterialAdmin(Material)
+
+        with pytest.raises(FormValidationError) as exc_info:
+            await view.validate(
+                None,
+                {
+                    "title": "Test",
+                    "description": "Test",
+                    "material_type": "MATERIALS",
+                    "user": None,
+                    "lesson": None,
+                },
+            )
+
+        assert exc_info.value.errors == {
+            "user": "This field is required",
+            "lesson": "This field is required",
+        }
+
+    run_async(scenario())
+
+
+def test_authenticated_admin_can_upload_file_from_create_form(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLASSROOM_UPLOAD_ROOT", str(tmp_path / "uploads"))
+
+    async def scenario():
+        engine, async_session_maker = await make_session(tmp_path)
+
+        try:
+            async with async_session_maker() as db:
+                await seed_admin_users(db)
+
+            client = TestClient(
+                make_admin_app(
+                    engine,
+                    views=[UserAdmin(User), UploadedFileAdmin(UploadedFile)],
+                    include_file_preview_route=True,
+                ),
+                follow_redirects=False,
+            )
+            login_response = client.post(
+                "/admin/login",
+                data={
+                    "username": "admin@example.com",
+                    "password": "Admin_12345",
+                },
+            )
+            assert login_response.status_code == 303
+
+            create_response = client.post(
+                "/admin/uploaded-file/create",
+                data={"owner": "1"},
+                files={
+                    "upload": (
+                        "lesson-notes.txt",
+                        b"Lesson notes",
+                        "text/plain",
+                    )
+                },
+            )
+
+            assert create_response.status_code == 303
+            assert create_response.headers["location"].endswith(
+                "/admin/uploaded-file/list"
+            )
+
+            async with async_session_maker() as db:
+                uploaded_file = (
+                    await db.execute(select(UploadedFile))
+                ).scalar_one()
+
+            assert uploaded_file.owner_id == 1
+            assert uploaded_file.filename == "lesson-notes.txt"
+            assert uploaded_file.content_type == "text/plain"
+            assert uploaded_file.size == len(b"Lesson notes")
+            assert (tmp_path / "uploads" / uploaded_file.storage_path).read_bytes() == (
+                b"Lesson notes"
+            )
+        finally:
+            await engine.dispose()
+
+    run_async(scenario())
+
+
 def test_authenticated_admin_can_preview_uploaded_text_file(tmp_path, monkeypatch):
     text_content = b"Admin text preview"
     stored_file = tmp_path / "user-1" / "stored.txt"
@@ -231,7 +360,7 @@ def test_authenticated_admin_can_preview_uploaded_text_file(tmp_path, monkeypatc
             client = TestClient(
                 make_admin_app(
                     engine,
-                    views=[UploadedFileAdmin(UploadedFile)],
+                    views=[UserAdmin(User), UploadedFileAdmin(UploadedFile)],
                     include_file_preview_route=True,
                 ),
                 follow_redirects=False,
