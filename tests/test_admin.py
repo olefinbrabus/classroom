@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -17,6 +18,7 @@ from database.engine import BaseModel
 from database.models import (
     Announcement,
     Assignment,
+    Course,
     Enrollment,
     Grade,
     Lesson,
@@ -26,11 +28,13 @@ from database.models import (
     User,
 )
 from lms_admin.auth import SuperuserAdminAuth
+from lms_admin.dashboard import DashboardView, get_dashboard_data
 from lms_admin.file_preview import add_uploaded_file_preview_route
 from lms_admin.setup import ADMIN_TEMPLATES_DIR
 from lms_admin.views import (
     AnnouncementAdmin,
     AssignmentAdmin,
+    CourseAdmin,
     EnrollmentAdmin,
     GradeAdmin,
     LessonAdmin,
@@ -40,6 +44,12 @@ from lms_admin.views import (
     UserAdmin,
 )
 from main import app
+from enums import (
+    ClassMaterialsType,
+    EnrollmentRole,
+    EnrollmentStatus,
+    SubmissionStatus,
+)
 from user.auth import SECRET
 from user.manager import UserManager
 
@@ -96,13 +106,95 @@ async def seed_admin_users(db):
     await db.commit()
 
 
-def make_admin_app(engine, views=None, include_file_preview_route=False):
+async def seed_dashboard_data(db):
+    course = Course(
+        id=1,
+        title="Python Basics",
+        description="Intro course",
+        is_active=True,
+    )
+    lesson = Lesson(
+        id=1,
+        course=course,
+        title="Async APIs",
+        description="Build FastAPI routes",
+        position=1,
+        is_published=True,
+    )
+    assignment = Assignment(
+        id=1,
+        lesson=lesson,
+        title="Submit an API exercise",
+        description="Upload your solution",
+        deadline=datetime.now(timezone.utc) + timedelta(days=2),
+        max_score=20,
+        is_published=True,
+    )
+    db.add_all(
+        [
+            course,
+            Enrollment(
+                course=course,
+                user_id=1,
+                role=EnrollmentRole.TEACHER,
+                status=EnrollmentStatus.ACTIVE,
+            ),
+            Enrollment(
+                course=course,
+                user_id=2,
+                role=EnrollmentRole.STUDENT,
+                status=EnrollmentStatus.ACTIVE,
+            ),
+            lesson,
+            Material(
+                id=1,
+                title="API notes",
+                description="Read before submitting",
+                user_id=1,
+                lesson=lesson,
+                material_type=ClassMaterialsType.MATERIALS,
+            ),
+            assignment,
+            Submission(
+                id=1,
+                assignment=assignment,
+                student_id=2,
+                text="Done",
+                status=SubmissionStatus.SUBMITTED,
+            ),
+            Announcement(
+                id=1,
+                course=course,
+                author_id=1,
+                title="Welcome",
+                message="Start with the classwork tab.",
+            ),
+            UploadedFile(
+                id=1,
+                owner_id=1,
+                filename="lesson-notes.txt",
+                content_type="text/plain",
+                size=12,
+                storage_path="user-1/lesson-notes.txt",
+            ),
+        ]
+    )
+    await db.commit()
+
+
+def make_admin_app(
+    engine,
+    views=None,
+    include_file_preview_route=False,
+    index_view=None,
+):
     test_app = FastAPI()
     admin = Admin(
         engine,
         title="Test LMS Admin",
         base_url="/admin",
         templates_dir=str(ADMIN_TEMPLATES_DIR),
+        index_view=index_view,
         auth_provider=SuperuserAdminAuth(),
         middlewares=[
             Middleware(
@@ -191,6 +283,84 @@ def test_authenticated_admin_can_open_user_list(tmp_path):
 
             assert list_response.status_code == 200
             assert "admin@example.com" in list_response.text
+        finally:
+            await engine.dispose()
+
+    run_async(scenario())
+
+
+def test_dashboard_data_summarizes_teacher_workload(tmp_path):
+    async def scenario():
+        engine, async_session_maker = await make_session(tmp_path)
+
+        try:
+            async with async_session_maker() as db:
+                await seed_admin_users(db)
+                await seed_dashboard_data(db)
+                dashboard = await get_dashboard_data(db)
+
+            metrics = {item["label"]: item["value"] for item in dashboard["metrics"]}
+
+            assert metrics["Active courses"] == 1
+            assert metrics["Students"] == 1
+            assert metrics["Teachers"] == 1
+            assert metrics["To review"] == 1
+            assert metrics["Published lessons"] == 1
+            assert metrics["Resources"] == 1
+            assert metrics["Files"] == 1
+            assert dashboard["completion"]["completion_rate"] == 100
+            assert dashboard["completion"]["graded_rate"] == 0
+            assert dashboard["to_review"][0]["title"] == "Submit an API exercise"
+            assert dashboard["upcoming"][0]["course"] == "Python Basics"
+            assert dashboard["course_health"][0]["to_review"] == 1
+        finally:
+            await engine.dispose()
+
+    run_async(scenario())
+
+
+def test_authenticated_admin_dashboard_renders_lms_overview(tmp_path):
+    async def scenario():
+        engine, async_session_maker = await make_session(tmp_path)
+
+        try:
+            async with async_session_maker() as db:
+                await seed_admin_users(db)
+                await seed_dashboard_data(db)
+
+            client = TestClient(
+                make_admin_app(
+                    engine,
+                    views=[
+                        UserAdmin(User),
+                        CourseAdmin(Course),
+                        LessonAdmin(Lesson),
+                        AssignmentAdmin(Assignment),
+                        SubmissionAdmin(Submission),
+                        UploadedFileAdmin(UploadedFile),
+                        AnnouncementAdmin(Announcement),
+                    ],
+                    index_view=DashboardView(),
+                ),
+                follow_redirects=False,
+            )
+            login_response = client.post(
+                "/admin/login",
+                data={
+                    "username": "admin@example.com",
+                    "password": "Admin_12345",
+                },
+            )
+            assert login_response.status_code == 303
+
+            response = client.get("/admin/")
+
+            assert response.status_code == 200
+            assert "LMS Dashboard" in response.text
+            assert "Work To Review" in response.text
+            assert "Submit an API exercise" in response.text
+            assert "Python Basics" in response.text
+            assert "/admin/uploaded-file/create" in response.text
         finally:
             await engine.dispose()
 

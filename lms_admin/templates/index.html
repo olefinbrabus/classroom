@@ -1,0 +1,244 @@
+{% extends "layout.html" %}
+
+{% macro empty_state(text) %}
+    <div class="text-muted py-3">{{ text }}</div>
+{% endmacro %}
+
+{% block header %}
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h1 class="mb-1">LMS Dashboard</h1>
+            <div class="text-muted">Course activity, grading workload, files, and publishing status.</div>
+        </div>
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item active">Dashboard</li>
+        </ol>
+    </div>
+{% endblock %}
+
+{% block content %}
+    <div class="col-12">
+        <div class="row row-cards">
+            {% for metric in dashboard.metrics %}
+                <div class="col-sm-6 col-lg-3">
+                    <a class="card card-link" href="{{ metric.url }}">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <span class="avatar me-3 {% if metric.tone == 'warning' %}bg-warning-lt{% elif metric.tone == 'success' %}bg-success-lt{% else %}bg-primary-lt{% endif %}">
+                                    <i class="{{ metric.icon }}"></i>
+                                </span>
+                                <div>
+                                    <div class="text-muted">{{ metric.label }}</div>
+                                    <div class="h2 mb-0">{{ metric.value }}</div>
+                                </div>
+                            </div>
+                            <div class="text-muted mt-3">{{ metric.hint }}</div>
+                        </div>
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Work To Review</h2>
+                <div class="card-actions">
+                    <a href="/admin/submission/list" class="btn btn-sm btn-outline-primary">Open submissions</a>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                    <tr>
+                        <th>Assignment</th>
+                        <th>Course</th>
+                        <th class="text-end">Submitted</th>
+                        <th class="text-end">Ungraded</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for item in dashboard.to_review %}
+                        <tr>
+                            <td>
+                                <a href="{{ item.url }}">{{ item.title }}</a>
+                                <div class="text-muted">{{ item.lesson }}</div>
+                            </td>
+                            <td>{{ item.course }}</td>
+                            <td class="text-end">{{ item.submitted_count }}</td>
+                            <td class="text-end">
+                                <span class="badge bg-warning-lt">{{ item.ungraded_count }}</span>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="4">{{ empty_state("No submitted work waiting for grading.") }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Submission Progress</h2>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-1">
+                    <span>Turned in</span>
+                    <strong>{{ dashboard.completion.completion_rate }}%</strong>
+                </div>
+                <div class="progress mb-3">
+                    <div class="progress-bar" style="width: {{ dashboard.completion.completion_rate }}%"></div>
+                </div>
+                <div class="d-flex justify-content-between mb-1">
+                    <span>Graded</span>
+                    <strong>{{ dashboard.completion.graded_rate }}%</strong>
+                </div>
+                <div class="progress mb-3">
+                    <div class="progress-bar bg-success" style="width: {{ dashboard.completion.graded_rate }}%"></div>
+                </div>
+                <div class="row text-center">
+                    <div class="col">
+                        <div class="h3 mb-0">{{ dashboard.completion.total }}</div>
+                        <div class="text-muted">Total</div>
+                    </div>
+                    <div class="col">
+                        <div class="h3 mb-0">{{ dashboard.completion.draft }}</div>
+                        <div class="text-muted">Drafts</div>
+                    </div>
+                    <div class="col">
+                        <div class="h3 mb-0">{{ dashboard.completion.returned }}</div>
+                        <div class="text-muted">Returned</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">
+                <h2 class="card-title">Quick Actions</h2>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for action in dashboard.quick_actions %}
+                    <a href="{{ action.url }}" class="list-group-item list-group-item-action">
+                        <i class="{{ action.icon }} me-2 text-muted"></i>{{ action.label }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Upcoming Deadlines</h2>
+                <div class="card-actions">
+                    <a href="/admin/assignment/list" class="btn btn-sm btn-outline-primary">All assignments</a>
+                </div>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for item in dashboard.upcoming %}
+                    <a href="{{ item.url }}" class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <strong>{{ item.title }}</strong>
+                                <div class="text-muted">{{ item.course }} · {{ item.lesson }}</div>
+                            </div>
+                            <div class="text-muted text-end">{{ item.deadline.strftime("%b %d, %H:%M") }}</div>
+                        </div>
+                    </a>
+                {% else %}
+                    <div class="list-group-item">{{ empty_state("No upcoming assignment deadlines.") }}</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Recent Activity</h2>
+            </div>
+            <div class="card-body">
+                <h3 class="card-title mb-2">Announcements</h3>
+                {% for item in dashboard.recent_activity.announcements %}
+                    <div class="mb-3">
+                        <a href="{{ item.url }}">{{ item.title }}</a>
+                        <div class="text-muted">{{ item.course }} · {{ item.author }}</div>
+                    </div>
+                {% else %}
+                    {{ empty_state("No announcements yet.") }}
+                {% endfor %}
+                <h3 class="card-title mb-2 mt-4">Files</h3>
+                {% for item in dashboard.recent_activity.files %}
+                    <div class="mb-3">
+                        <a href="{{ item.url }}">{{ item.filename }}</a>
+                        <div class="text-muted">{{ item.owner }} · {{ item.size }} bytes</div>
+                    </div>
+                {% else %}
+                    {{ empty_state("No uploaded files yet.") }}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Course Health</h2>
+                <div class="card-actions">
+                    <a href="/admin/course/list" class="btn btn-sm btn-outline-primary">Manage courses</a>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-vcenter card-table">
+                    <thead>
+                    <tr>
+                        <th>Course</th>
+                        <th>Status</th>
+                        <th class="text-end">Students</th>
+                        <th class="text-end">Lessons</th>
+                        <th class="text-end">Assignments</th>
+                        <th class="text-end">Resources</th>
+                        <th class="text-end">To review</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for course in dashboard.course_health %}
+                        <tr>
+                            <td><a href="{{ course.url }}">{{ course.title }}</a></td>
+                            <td>
+                                {% if course.is_active %}
+                                    <span class="badge bg-success-lt">Active</span>
+                                {% else %}
+                                    <span class="badge bg-secondary-lt">Draft</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">{{ course.students }}</td>
+                            <td class="text-end">{{ course.published_lessons }}/{{ course.lessons }}</td>
+                            <td class="text-end">{{ course.assignments }}</td>
+                            <td class="text-end">{{ course.resources }}</td>
+                            <td class="text-end">
+                                {% if course.to_review %}
+                                    <span class="badge bg-warning-lt">{{ course.to_review }}</span>
+                                {% else %}
+                                    <span class="text-muted">0</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="7">{{ empty_state("No courses have been created yet.") }}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% endblock %}
